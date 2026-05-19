@@ -1,0 +1,34 @@
+name: Fetch Weekly toto Data
+
+on:
+  schedule:
+    # 毎週木曜日の日本時間 22:00（世界標準時 13:00）に自動実行
+    - cron: '0 13 * * 4'
+  workflow_dispatch: # 手動でいつでも実行できるようにするボタンを設置
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out repository code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        pip install beautifulsoup4
+
+    - name: Run script
+      run: python fetch_toto.py
+
+    - name: Commit and Push changes
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add data.json
+        git commit -m "Automated data update" || echo "No changes to commit"
+        git push
