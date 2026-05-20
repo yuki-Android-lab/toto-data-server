@@ -64,9 +64,9 @@ def fetch_missing_players_count(team_name, api_key=None):
         "福岡": "Avispa Fukuoka", "神戸": "Vissel Kobe", "鹿島": "Kashima Antlers", 
         "FC東京": "FC Tokyo", "名古屋": "Nagoya Grampus", "広島": "Sanfrecce Hiroshima",
         "札幌": "Consadole Sapporo", "柏": "Kashiwa Reysol", "浦和": "Urawa Red Diamonds",
-        "東京V": "Tokyo Verdy", "町田": "FC Machida Zelvia", "川崎F": "Kawasaki Frontale",
+        "東京V": "Tokyo Verdy", "東京Ｖ": "Tokyo Verdy", "町田": "FC Machida Zelvia", "川崎F": "Kawasaki Frontale", "川崎Ｆ": "Kawasaki Frontale",
         "横浜FM": "Yokohama F. Marinos", "湘南": "Shonan Bellmare", "新潟": "Albirex Niigata",
-        "磐田": "Jubilo Iwata", "G大阪": "Gamba Osaka", "C大阪": "Cerezo Osaka",
+        "磐田": "Jubilo Iwata", "G大阪": "Gamba Osaka", "Ｇ大阪": "Gamba Osaka", "C大阪": "Cerezo Osaka", "Ｃ大阪": "Cerezo Osaka",
         "鳥栖": "Sagan Tosu", "京都": "Kyoto Sanga",
         "清水": "Shimizu S-Pulse", "横浜FC": "Yokohama FC", "長崎": "V-Varen Nagasaki",
         "仙台": "Vegalta Sendai", "山形": "Montedio Yamagata", "千葉": "JEF United Chiba",
@@ -109,14 +109,16 @@ def get_official_standings():
         "ブンデス": "https://soccer.yahoo.co.jp/ws/category/ger/standings"
     }
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64 x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
     
+    # 全角・半角のどちらで来てもいいように網羅したターゲットリスト
     target_teams = [
         "福岡", "神戸", "鹿島", "FC東京", "名古屋", "広島", "札幌", "柏", "浦和", 
-        "東京V", "町田", "川崎F", "横浜FM", "湘南", "新潟", "磐田", "G大阪", "C大阪", 
-        "鳥栖", "京都", "清水", "横浜FC", "長崎", "仙台", "山形", "千葉", "岡山", "水戸",
-        "徳島", "今治", "藤枝", "いわき", "マンC", "マンU", "アーセナル", "リバプール"
+        "東京V", "東京Ｖ", "町田", "川崎F", "川崎Ｆ", "横浜FM", "湘南", "新潟", 
+        "磐田", "G大阪", "Ｇ大阪", "C大阪", "Ｃ大阪", "鳥栖", "京都", "清水", 
+        "横浜FC", "長崎", "仙台", "山形", "千葉", "岡山", "水戸", "徳島", "今治", 
+        "藤枝", "いわき", "マンC", "マンU", "アーセナル", "リバプール"
     ]
     
     for category, url in urls.items():
@@ -129,7 +131,6 @@ def get_official_standings():
             
             tables = soup.find_all('table')
             for table in tables:
-                # 1. テーブルごとに「得点」ヘッダーの列位置を特定
                 goals_idx = -1
                 headers_tr = table.find('tr')
                 if headers_tr:
@@ -139,41 +140,40 @@ def get_official_standings():
                             goals_idx = idx
                             break
                 
-                # 2. 各データ行の解析
                 for row in table.find_all('tr'):
                     cols = row.find_all('td')
                     if len(cols) < 3: 
                         continue
                     
-                    # 各列のテキストをトリミングしてリスト化
                     col_texts = [c.text.strip().replace(" ", "").replace("　", "") for c in cols]
                     
-                    # 行内の「チーム名」が含まれるセルを厳密に探す
                     for team in target_teams:
-                        # すでに正しいグループでキャッシュ済みの場合は、別テーブルのデータで上書きしない
-                        if team in raw_data:
+                        # 全角・半角どちらかの表記ですでに保存済みの場合はスキップ
+                        norm_team = team.replace("Ｃ", "C").replace("Ｇ", "G").replace("Ｖ", "V").replace("Ｆ", "F")
+                        if norm_team in raw_data:
                             continue
                             
-                        # Yahoo!の表記揺れに対応するマッチングロジック
                         is_team_row = False
                         for cell_text in col_texts:
+                            # 1. 完全一致判定
                             if cell_text == team:
                                 is_team_row = True
-                            elif team == "G大阪" and cell_text == "ガンバ大阪":
+                            # 2. Yahoo!の漢字・カタカナ正式表記とのマッチング（全角・半角の両方に対応）
+                            elif (team in ["G大阪", "Ｇ大阪"]) and "ガンバ大阪" in cell_text:
                                 is_team_row = True
-                            elif team == "C大阪" and cell_text == "セレッソ大阪":
+                            elif (team in ["C大阪", "Ｃ大阪"]) and "セレッソ大阪" in cell_text:
                                 is_team_row = True
-                            elif team == "東京V" and cell_text == "東京ヴェルディ":
+                            elif (team in ["東京V", "東京Ｖ"]) and "東京ヴェルディ" in cell_text:
+                                is_team_row = True
+                            elif (team in ["川崎F", "川崎Ｆ"]) and "フロンターレ" in cell_text:
+                                is_team_row = True
+                            elif team == "磐田" and "ジュビロ磐田" in cell_text:
                                 is_team_row = True
                             elif team == "横浜FM" and "マリノス" in cell_text:
                                 is_team_row = True
-                            elif team == "川崎F" and "フロンターレ" in cell_text:
-                                is_team_row = True
 
-                        # 対象チームの行だと100%特定できた場合のみ処理
                         if is_team_row:
                             try:
-                                # 順位：1列目（あるいは数字が入っている最初の列）から確実に取得
                                 rank = 99
                                 for txt in col_texts[:2]:
                                     r_match = re.search(r'\d+', txt)
@@ -181,7 +181,6 @@ def get_official_standings():
                                         rank = int(r_match.group())
                                         break
                                 
-                                # 得点：ヘッダー準拠、なければ後ろから2番目のセーフティ
                                 goals = 0
                                 if goals_idx != -1 and goals_idx < len(cols):
                                     g_txt = col_texts[goals_idx]
@@ -192,11 +191,11 @@ def get_official_standings():
                                     if len(num_cols) >= 5:
                                         goals = num_cols[-2]
                                 
-                                # キャッシュに保存（初回検知名を最優先にするため、ガードが効いています）
-                                raw_data[team] = {"rank": rank, "goals": goals}
+                                # 内部では半角に統一して保存
+                                raw_data[norm_team] = {"rank": rank, "goals": goals}
                             except Exception:
                                 continue
-                            break # この行のチーム探索を抜ける
+                            break
                             
         except Exception as e:
             print(f"    [WARN] {category} の順位表パース中に問題が発生しました: {e}")
@@ -205,13 +204,15 @@ def get_official_standings():
     return raw_data
 
 def find_stats(toto_name, raw_data):
-    clean_toto_name = toto_name.replace(" ", "").replace("　", "")
+    # 検索時も半角に正規化してルックアップする
+    clean_name = toto_name.replace(" ", "").replace("　", "")
+    norm_name = clean_name.replace("Ｃ", "C").replace("Ｇ", "G").replace("Ｖ", "V").replace("Ｆ", "F")
     
-    if clean_toto_name in raw_data:
-        return raw_data[clean_toto_name]["rank"], raw_data[clean_toto_name]["goals"]
+    if norm_name in raw_data:
+        return raw_data[norm_name]["rank"], raw_data[norm_name]["goals"]
         
     for official_name, stats in raw_data.items():
-        if clean_toto_name in official_name or official_name in clean_toto_name:
+        if norm_name in official_name or official_name in norm_name:
             return stats["rank"], stats["goals"]
             
     import random
