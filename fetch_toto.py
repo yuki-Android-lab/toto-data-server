@@ -36,8 +36,24 @@ def main():
             "awayRainWinRate": "55%"
         })
 
+    # ファイルへの保存処理
     with open("data.json", "w", encoding="utf-8") as f:
         json.dump(match_list, f, ensure_ascii=False, indent=4)
+    print("--- data.json の保存が完了しました ---")
+
+    # ==========================================
+    # 【追加】保存された data.json を読み込んで一覧表示する処理
+    # ==========================================
+    print("\n【今週の対戦カード一覧】")
+    with open("data.json", "r", encoding="utf-8") as f:
+        loaded_data = json.load(f)
+        
+        for match in loaded_data:
+            no = match["matchNo"]
+            home = match["homeTeam"]
+            away = match["awayTeam"]
+            print(f"第 {no:02d} 試合: {home} vs {away}")
+    # ==========================================
 
 if __name__ == "__main__":
     main()
