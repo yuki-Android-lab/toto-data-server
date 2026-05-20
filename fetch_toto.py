@@ -5,10 +5,11 @@ import re
 import sys
 
 def get_current_toto_teams():
-    """ご指摘いただいた固有のHTML属性（my-game, poll_v）を直接指定して
-    13試合のホーム・アウェイおよび開催日を確実に抽出する堅牢なロジックです。"""
+    """HTMLからtoto回数、開催日、そして13試合の対戦カードを
+    固有属性（my-game, poll_v）から完全ピンポイントで抽出します。"""
     toto_teams = []
-    match_date = "5/23" # デフォルト値（パース失敗時のフォールバック用）
+    match_date = "5/23" # デフォルト値
+    hold_id = 0         # デフォルト値
     url = "https://toto.yahoo.co.jp/toto/?holdId=1631"
     
     headers = {
@@ -22,29 +23,34 @@ def get_current_toto_teams():
             
         soup = BeautifulSoup(html, 'html.parser')
         
-        # 1. 開催日の動的パース
-        # <span class="sub_date">5/16〜5/23 13:50</span> から「5/23」を抽出
+        # 1. toto回数の動的パース
+        # <span class="toto_tab_txtArea">第1631回... の中から数字だけを抽出
+        tab_txt_tag = soup.find("span", class_="toto_tab_txtArea")
+        if tab_txt_tag:
+            tab_text = tab_txt_tag.text.strip()
+            # 正規表現で「第1631回」などの文字列から連続する数字を取り出す
+            num_match = re.search(r'\d+', tab_text)
+            if num_match:
+                hold_id = int(num_match.group())
+                print(f"--- [INFO] HTMLから取得したtoto回数: 第{hold_id}回 ---")
+        
+        # 2. 開催日の動的パース
         sub_date_tag = soup.find("span", class_="sub_date")
         if sub_date_tag:
             date_text = sub_date_tag.text.strip()
             if "〜" in date_text:
-                # 「〜」の右側を取得（例: "5/23 13:50"）
                 after_wave = date_text.split("〜")[1].strip()
-                # 半角スペースで区切って時刻を除外（例: "5/23"）
                 match_date = after_wave.split(" ")[0].strip()
                 print(f"--- [INFO] HTMLから取得した開催日: {match_date} ---")
 
-        # 2. 試合ごとのチーム名抽出
-        # my-game="0" から "12" までをループで確実に探索
+        # 3. 試合ごとのチーム名抽出 (0〜12の13試合)
         for game_idx in range(13):
             row = soup.find("tr", attrs={"my-game": str(game_idx)})
             if row:
-                # poll_v="1"（ホーム）と poll_v="2"（アウェイ）を持つ td を取得
                 home_td = row.find("td", attrs={"class": "team_btn", "poll_v": "1"})
                 away_td = row.find("td", attrs={"class": "team_btn", "poll_v": "2"})
                 
                 if home_td and away_td:
-                    # <td> の中にある <span> 内のテキストを取得
                     home_span = home_td.find("span")
                     away_span = away_td.find("span")
                     
@@ -54,17 +60,11 @@ def get_current_toto_teams():
                         
                         toto_teams.append((home_name, away_name))
                         print(f"  [試合No.{game_idx+1:02d}] ホーム: {home_name:<8} vs  アウェイ: {away_name}")
-                    else:
-                        print(f"  [WARNING] 試合No.{game_idx+1} の span タグが見つかりません。")
-                else:
-                    print(f"  [WARNING] 試合No.{game_idx+1} の poll_v 属性を持つ td が見つかりません。")
-            else:
-                print(f"  [WARNING] my-game='{game_idx}' を持つ tr が見つかりません。")
 
     except Exception as e:
         print(f"【エラー】HTMLの解析中に問題が発生しました: {e}")
         
-    return toto_teams, match_date
+    return toto_teams, match_date, hold_id
 
 def get_official_standings():
     raw_data = {}
@@ -114,9 +114,9 @@ def find_stats(toto_name, raw_data):
     alias_map = {
         "札幌": "コンサドーレ札幌", "仙台": "ベガルタ仙台", "いわき": "いわきＦＣ", 
         "水戸": "水戸ホーリーホック", "栃木": "栃木ＳＣ", "群馬": "ザスパ群馬", 
-        "千葉": "ジェフユナイテッド千葉", "柏": "柏レイソル", "FC東京": "ＦＣ東京", "東京V": "東京ヴェルディ",
+        "千葉": "ジェフユエアテッド千葉", "柏": "柏レイソル", "FC東京": "ＦＣ東京", "東京V": "東京ヴェルディ",
         "町田": "ＦＣ町田ゼルビア", "川崎F": "川崎フロンターレ", "横浜FM": "横浜Ｆ・マリノス", "横浜FC": "横浜ＦＣ", 
-        "湘南": "湘南ベルマーレ", "甲府": "ヴァンフォーレ角府", "新潟": "アルビレックス新潟", "清水": "清水エスパルス",
+        "湘南": "湘南ベルマーレ", "甲府": "ヴァンフォーレ甲府", "新潟": "アルビレックス新潟", "清水": "清水エスパルス",
         "磐田": "ジュビロ磐田", "藤枝": "藤枝ＭＹＦＣ", "名古屋": "名古屋グランパス", "京都": "京都サンガF.C.", 
         "G大阪": "ガンバ大阪", "C大阪": "セレッソ大阪", "神戸": "ヴィッセル神戸", "岡山": "ファジアーノ岡山", 
         "広島": "サンフレッチェ広島", "徳島": "徳島ヴォルティス", "愛媛": "愛媛ＦＣ", "今治": "ＦＣ今治", 
@@ -134,8 +134,8 @@ def find_stats(toto_name, raw_data):
     return 10, 15
 
 def main():
-    print("1. 今週のtoto対象対戦カードをパース中...")
-    teams, match_date = get_current_toto_teams()
+    print("1. 今週のtoto対象対戦カードおよび各種基本データを取得中...")
+    teams, match_date, hold_id = get_current_toto_teams()
     
     if len(teams) < 13:
         print(f"\n【警告】13試合分のデータを正常に抽出できませんでした（現在特定数: {len(teams)}組）。")
@@ -146,22 +146,32 @@ def main():
     
     match_list = []
     for i, (home, away) in enumerate(teams, 1):
-        # 以前発生していた「ホームに開催日が入ってしまう現象」を完全に抑止するため、
-        # 万が一日付が入った場合は、動的に取得した match_date を代入するようにガード。
-        # 正常にチーム名が取れている場合はそのまま適用されます。
         display_home = match_date if home == match_date or ("/" in home) else home
         
         home_rank, home_goals = find_stats(display_home, raw_data)
         away_rank, away_goals = find_stats(away, raw_data)
         
         match_list.append({
-            "matchNo": i, "homeTeam": display_home, "awayTeam": away,
-            "homeRank": home_rank, "awayRank": away_rank,      
-            "homeGoalsFor": home_goals, "awayGoalsFor": away_goals,  
-            "homeInjuries": 0, "awayInjuries": 1, "weather": "晴",
-            "homeCompatibility": "拮抗", "homeTactics": "カウンター", "awayTactics": "ポゼッション",
-            "homeRecent": "普通", "awayRecent": "好調", "homeInterval": "中6日", "awayInterval": "中3日",
-            "homeRainWinRate": "45%", "awayRainWinRate": "55%"
+            "holdId": hold_id, # 自動取得したtoto回数（例: 1631）を各試合に保持
+            "matchNo": i, 
+            "homeTeam": display_home, 
+            "awayTeam": away,
+            "homeRank": home_rank, 
+            "awayRank": away_rank,      
+            "homeGoalsFor": home_goals, 
+            "awayGoalsFor": away_goals,  
+            "homeInjuries": 0, 
+            "awayInjuries": 1, 
+            "weather": "晴",
+            "homeCompatibility": "拮抗", 
+            "homeTactics": "カウンター", 
+            "awayTactics": "ポゼッション",
+            "homeRecent": "普通", 
+            "awayRecent": "好調", 
+            "homeInterval": "中6日", 
+            "awayInterval": "中3日",
+            "homeRainWinRate": "45%", 
+            "awayRainWinRate": "55%"
         })
 
     with open("data.json", "w", encoding="utf-8") as f:
