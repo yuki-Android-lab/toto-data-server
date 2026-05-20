@@ -82,7 +82,6 @@ def fetch_missing_players_count(team_name, api_key=None):
     if not api_key:
         import random
         mock_count = random.randint(0, 2)
-        print(f"    [API_MOCK] {team_name} -> {english_name} のマッピング成功 (テスト出力: {mock_count}人)")
         return mock_count
 
     try:
@@ -95,18 +94,14 @@ def fetch_missing_players_count(team_name, api_key=None):
             res_body = response.read().decode('utf-8', errors='ignore')
             data = json.loads(res_body)
             injuries_list = data.get("response", [])
-            count = len(injuries_list)
-            print(f"    [API_REAL] {team_name} ({english_name}) のリアル欠場データを取得 -> {count}名")
-            return count
-    except Exception as e:
-        print(f"    [API_ERROR] APIとの通信中にエラーが発生しました(0名として処理): {e}")
+            return len(injuries_list)
+    except Exception:
         return 0
 
 def get_official_standings():
     raw_data = {}
-    # J1特別大会（j1ss）の正しいURLへ完全修正
     urls = {
-        "J1": "https://soccer.yahoo.co.jp/jleague/category/j1ss/standings",
+        "J1": "https://soccer.yahoo.co.jp/jleague/category/j1/standings",
         "J2": "https://soccer.yahoo.co.jp/jleague/category/j2/standings",
         "J3": "https://soccer.yahoo.co.jp/jleague/category/j3/standings",
         "プレミア": "https://soccer.yahoo.co.jp/ws/category/eng/standings",
@@ -122,60 +117,74 @@ def get_official_standings():
             with urllib.request.urlopen(req) as response:
                 html = response.read().decode('utf-8', errors='ignore')
             
-            soup = BeautifulSoup(html, 'html.parser')
+            soup = BeautifulSoup(html, 'utf-8', errors='ignore')
             
-            # 2026年現在のYahoo!スポーツ共通の順位表構造
-            table = soup.find('table', class_='yjStTable') or soup.find('table', class_='sn-table') or soup.find('table')
-            if not table: 
-                continue
-                
-            for row in table.find_all('tr')[1:]:
+            for row in soup.find_all('tr'):
                 cols = row.find_all('td')
                 if len(cols) < 3: 
                     continue
                 
                 try:
-                    rank_text = cols[0].text.strip()
-                    rank = int(re.search(r'\d+', rank_text).group()) if re.search(r'\d+', rank_text) else 99
+                    rank_match = re.search(r'\d+', cols[0].text.strip())
+                    if not rank_match:
+                        continue
+                    rank = int(rank_match.group())
                     
                     team_name = cols[1].text.strip().replace(" ", "").replace("　", "")
-                    team_name = re.sub(r'\d+位', '', team_name) # 不要な文字の除外
+                    team_name = re.sub(r'\d+位', '', team_name)
                     
-                    # 7番目のカラム（インデックス6）から総得点数を抽出
-                    goals = int(cols[6].text.strip()) if len(cols) > 6 else 0
+                    if not team_name or len(team_name) < 2:
+                        continue
+                    
+                    goals = 0
+                    if len(cols) > 6:
+                        goals_match = re.search(r'\d+', cols[6].text.strip())
+                        if goals_match:
+                            goals = int(goals_match.group())
                     
                     raw_data[team_name] = {"rank": rank, "goals": goals}
-                except ValueError:
+                except Exception:
                     continue
         except Exception as e:
-            print(f"    [WARN] {category} の順位表パース中にスキップが発生しました: {e}")
-            pass
+            print(f"    [WARN] {category} の順位表パース中に問題が発生しました: {e}")
             
     print(f"--- [INFO] Yahoo!スポーツから計 {len(raw_data)} チームの順位情報をキャッシュしました ---")
     return raw_data
 
 def find_stats(toto_name, raw_data):
-    alias_map = {
-        "札幌": "コンサドーレ札幌", "仙台": "ベガルタ仙台", "いわき": "いわきFC", 
-        "水戸": "水戸ホーリーホック", "栃木": "栃木SC", "群馬": "ザスパ群馬", 
-        "千葉": "ジェフユナイテッド千葉", "柏": "柏レイソル", "FC東京": "FC東京", "東京V": "東京ヴェルディ",
-        "町田": "FC町田ゼルビア", "川崎F": "川崎フロンターレ", "横浜FM": "横浜F・マリノス", "横浜FC": "横浜FC", 
-        "湘南": "湘南ベルマーレ", "甲府": "ヴァンフォーレ甲府", "新潟": "アルビレックス新潟", "清水": "清水エスパルス",
-        "磐田": "ジュビロ磐田", "藤枝": "藤枝MYFC", "名古屋": "名古屋グランパス", "京都": "京都サンガF.C.", 
-        "G大阪": "ガンバ大阪", "C大阪": "セレッソ大阪", "神戸": "ヴィッセル神戸", "岡山": "ファジアーノ岡山", 
-        "広島": "サンフレッチェ広島", "徳島": "徳島ヴォルティス", "愛媛": "愛媛FC", "今治": "FC今治", 
-        "福岡": "アビスパ福岡", "北九州": "ギラヴァンツ北九州", "鳥栖": "サガン鳥栖", "長崎": "V・ファーレン長崎",
-        "熊本": "ロアッソ熊本", "大分": "大分トリニータ", "鹿児島": "鹿児島ユナイテッドFC",
-        "マンU": "マンチェスター・ユナイテッド", "マンC": "マンチェスター・シティ", "フランクフ": "フランクフルト"
+    """【重複衝突回避版】
+    大阪・東京などの重複しやすいチームを完全一致で確実にガードします。"""
+    clean_toto_name = toto_name.replace(" ", "").replace("　", "")
+    
+    # 1. 誤判定を絶対に防ぐための「完全一致（シールド）」マッピング
+    # Yahoo!上の表記（例: 「ガンバ大阪」「セレッソ大阪」「ＦＣ東京」「東京ヴェルディ」等）に直接紐付けます
+    strict_map = {
+        "G大阪": "ガンバ大阪",
+        "C大阪": "セレッソ大阪",
+        "FC東京": "ＦＣ東京", # 全角半角どちらでも拾えるようループ側でもlower処理
+        "東京V": "東京ヴェルディ",
+        "川崎F": "川崎フロンターレ",
+        "横浜FM": "横浜Ｆ・マリノス",
+        "横浜FC": "横浜ＦＣ",
+        "マンC": "マンチェスター・ｃ",
+        "マンU": "マンチェスター・ｕ"
     }
     
-    search_name = alias_map.get(toto_name, toto_name).replace(" ", "").replace("　", "").lower()
+    # 衝突対象チームであれば、該当するYahoo!公式名側のデータをピンポイントでルックアップ
+    if clean_toto_name in strict_map:
+        target_official_name = strict_map[clean_toto_name].lower()
+        for official_name, stats in raw_data.items():
+            if official_name.lower() == target_official_name:
+                return stats["rank"], stats["goals"]
+                
+    # 2. 表記に重複リスクがないチームは、従来通りの柔軟な部分一致ループで処理
+    search_name = clean_toto_name.lower()
     for official_name, stats in raw_data.items():
         off_name_clean = official_name.lower()
         if (search_name in off_name_clean) or (off_name_clean in search_name):
             return stats["rank"], stats["goals"]
             
-    return 10, 15
+    return 18, 10
 
 def main():
     print("1. 今週のtoto対象対戦カードおよび各種基本データを取得中...")
