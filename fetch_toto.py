@@ -155,3 +155,41 @@ def main():
     teams = get_current_toto_teams()
     
     if len(teams) < 13:
+        print(f"\n==================================================")
+        print(f"【デバッグ終了】13試合分のデータを正常に抽出できませんでした。")
+        print(f"上記に出力された [DEBUG_ROW] および検出ログを確認してください。")
+        print(f"現在特定数: {len(teams)}組")
+        print(f"==================================================")
+        sys.exit(0)
+        
+    print("\n==================================================")
+    print("【検証ログ】プログラムが識別した13試合（完全確定）")
+    print("==================================================")
+    for i, (home, away) in enumerate(teams, 1):
+        print(f"  [試合No.{i:02d}] ホーム: {home:<8} vs  アウェイ: {away}")
+    print("==================================================\n")
+    
+    print("2. 各リーグの公式サイトから最新順位データを収集中...")
+    raw_data = get_official_standings()
+    
+    match_list = []
+    for i, (home, away) in enumerate(teams, 1):
+        home_rank, home_goals = find_stats(home, raw_data)
+        away_rank, away_goals = find_stats(away, raw_data)
+        
+        match_list.append({
+            "matchNo": i, "homeTeam": home, "awayTeam": away,
+            "homeRank": home_rank, "awayRank": away_rank,      
+            "homeGoalsFor": home_goals, "awayGoalsFor": away_goals,  
+            "homeInjuries": 0, "awayInjuries": 1, "weather": "晴",
+            "homeCompatibility": "拮抗", "homeTactics": "カウンター", "awayTactics": "ポゼッション",
+            "homeRecent": "普通", "awayRecent": "好調", "homeInterval": "中6日", "awayInterval": "中3日",
+            "homeRainWinRate": "45%", "awayRainWinRate": "55%"
+        })
+
+    with open("data.json", "w", encoding="utf-8") as f:
+        json.dump(match_list, f, ensure_ascii=False, indent=4)
+    print("\n--- data.json の保存が完了しました ---")
+
+if __name__ == "__main__":
+    main()
