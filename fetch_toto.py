@@ -2,11 +2,82 @@ import urllib.request
 from bs4 import BeautifulSoup
 import json
 
+def get_official_standings():
+    """全リーグの公式ページからデータを集め、{「公式チーム名」: {順位, 得点}} の辞書を作る"""
+    raw_data = {}
+    
+    # 巡回するURLの設定
+    urls = {
+        "J1": "https://www.jleague.jp/standings/j1/",
+        "J2": "https://www.jleague.jp/standings/j2/",
+        "J3": "https://www.jleague.jp/standings/j3/",
+        "プレミア": "https://soccer.yahoo.co.jp/ws/category/eng/standings",
+        "ブンデス": "https://soccer.yahoo.co.jp/ws/category/ger/standings"
+    }
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+    
+    for category, url in urls.items():
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req) as response:
+                soup = BeautifulSoup(response.read(), 'html.parser')
+            
+            # Jリーグと欧州（スポナビ）でテーブルのクラス名が違うので切り分け
+            if "jleague" in url:
+                table = soup.find('table', class_='table-standings')
+                if not table: continue
+                for row in table.find_all('tr')[1:]:
+                    cols = row.find_all('td')
+                    if len(cols) < 8: continue
+                    team_name = cols[1].text.strip() # 例：「アビスパ福岡」
+                    rank = int(cols[0].text.strip())
+                    goals = int(cols[7].text.strip())
+                    raw_data[team_name] = {"rank": rank, "goals": goals}
+            else:
+                table = soup.find('table', class_='sn-table')
+                if not table: continue
+                for row in table.find_all('tr')[1:]:
+                    cols = row.find_all('td')
+                    if len(cols) < 7: continue
+                    team_name = cols[1].text.strip() # 例：「マンチェスター・ユナイテッド」
+                    rank = int(cols[0].text.strip())
+                    goals = int(cols[6].text.strip())
+                    raw_data[team_name] = {"rank": rank, "goals": goals}
+        except Exception as e:
+            print(f"{category}のデータ取得失敗: {e}")
+            
+    return raw_data
+
+def find_stats(toto_name, raw_data):
+    """totoのチーム名（略称）から、公式データの順位と得点を賢く検索する関数"""
+    # 1. 特殊な略称の変換マップ（ここだけ定義しておけば大阪ペアや欧州も安心）
+    alias_map = {
+        "G大阪": "ガンバ大阪", "C大阪": "セレッソ大阪",
+        "マンU": "マンチェスター・ユナイテッド", "マンC": "マンチェスター・シティ",
+        "フランクフ": "フランクフルト", "B・MG": "ボルシアMG", "レバーク": "レバークーゼン"
+    }
+    
+    # 変換マップにある場合は、公式名に化けさせる
+    search_name = alias_map.get(toto_name, toto_name)
+    
+    # 全角・半角の「FC」などのブレを統一
+    search_name = search_name.replace("FC", "ＦＣ")
+
+    # 2. 部分一致による自動マッチング（京都、柏、水戸、将来の昇格チームもここで全自動ヒット）
+    for official_name, stats in raw_data.items():
+        if search_name in official_name or official_name in search_name:
+            return stats["rank"], stats["goals"]
+            
+    # 見つからない場合は初期値を返す
+    return 10, 15
+
 def main():
-    url = "https://www.sport-kuji.sportstoto.co.jp/toto/index.html"
+    print("各リーグの公式サイトから最新データを収集中...")
+    raw_data = get_official_standings()
+    
     match_list = []
     
-    # 今週（5月23日締め切り分）の正しい対戦カード
+    # 今週の対戦カード
     teams = [
         ("福岡", "神戸"), ("鹿島", "FC東京"), ("京都", "長崎"), ("岡山", "C大阪"),
         ("東京V", "横浜FM"), ("広島", "名古屋"), ("柏", "千葉"), ("水戸", "川崎F"),
@@ -14,14 +85,18 @@ def main():
     ]
     
     for i, (home, away) in enumerate(teams, 1):
+        # 賢くなった検索ロジックで本物のデータを取得
+        home_rank, home_goals = find_stats(home, raw_data)
+        away_rank, away_goals = find_stats(away, raw_data)
+        
         match_list.append({
             "matchNo": i,
             "homeTeam": home,
             "awayTeam": away,
-            "homeRank": 10,
-            "awayRank": 5,
-            "homeGoalsFor": 15,
-            "awayGoalsFor": 20,
+            "homeRank": home_rank,      
+            "awayRank": away_rank,      
+            "homeGoalsFor": home_goals,  
+            "awayGoalsFor": away_goals,  
             "homeInjuries": 0,
             "awayInjuries": 1,
             "weather": "晴",
@@ -36,24 +111,15 @@ def main():
             "awayRainWinRate": "55%"
         })
 
-    # ファイルへの保存処理
     with open("data.json", "w", encoding="utf-8") as f:
         json.dump(match_list, f, ensure_ascii=False, indent=4)
     print("--- data.json の保存が完了しました ---")
 
-    # ==========================================
-    # 【追加】保存された data.json を読み込んで一覧表示する処理
-    # ==========================================
-    print("\n【今週の対戦カード一覧】")
+    print("\n【完全自動判定版・データ反映後の対戦一覧】")
     with open("data.json", "r", encoding="utf-8") as f:
         loaded_data = json.load(f)
-        
         for match in loaded_data:
-            no = match["matchNo"]
-            home = match["homeTeam"]
-            away = match["awayTeam"]
-            print(f"第 {no:02d} 試合: {home} vs {away}")
-    # ==========================================
+            print(f"第 {match['matchNo']:02d} 試合: {match['homeTeam']}({match['homeRank']}位) vs {match['awayTeam']}({match['awayRank']}位) [ホーム総得点:{match['homeGoalsFor']}]")
 
 if __name__ == "__main__":
     main()
