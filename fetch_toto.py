@@ -5,8 +5,8 @@ import re
 import sys
 
 def get_current_toto_teams():
-    """Yahoo! totoのページのみから今週の13試合を抽出。
-    メンテナンス中などで取得できない場合は空リストを返す。"""
+    """Yahoo! totoのページから今週の13試合の対戦カードを直接抽出。
+    お知らせ文（テキスト）の有無による誤判定を完全に排除。"""
     toto_teams = []
     url = "https://toto.yahoo.co.jp/toto/"
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
@@ -15,18 +15,14 @@ def get_current_toto_teams():
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req) as response:
             html = response.read().decode('utf-8', errors='ignore')
-        
-        # メンテナンス画面であれば即座に処理を諦めて空で返す
-        if "システムメンテナンス" in html or "一時停止" in html:
-            print("【状態】Yahoo! totoがシステムメンテナンス中のため、対戦カードを読み込めません。")
-            return []
             
         soup = BeautifulSoup(html, 'html.parser')
+        # 直接対戦カードのテーブル行（tr）だけを探しに行く
         rows = soup.find_all('tr', class_=re.compile(r'match|card|row'))
+        
         for row in rows:
             cells = [td.text.strip() for td in row.find_all('td') if td.text.strip()]
             if len(cells) >= 3:
-                # 投票率などのノイズを徹底排除
                 clean_cells = [c for c in cells if "投票" not in c and "引き分け" not in c and "vs" not in c and "%" not in c]
                 if len(clean_cells) >= 2:
                     home = re.sub(r'\s+', '', clean_cells[0])
@@ -93,12 +89,12 @@ def find_stats(toto_name, raw_data):
         "横浜FM": "横浜Ｆ・マリノス", "横浜FC": "横浜ＦＣ", "湘南": "湘南ベルマーレ",
         "甲府": "ヴァンフォーレ甲府", "新潟": "アルビレックス新潟", "清水": "清水エスパルス",
         "磐田": "ジュビロ磐田", "藤枝": "藤枝ＭＹＦＣ", "名古屋": "名古屋グランパス", 
-        "京都": "京都サンガF.C.", "G大阪": "ガンバ大阪", "C大阪": "セレッソ大阪", 
+        "京都": "京都サンガF.C.", "G伴": "ガンバ大阪", "G大阪": "ガンバ大阪", "C大阪": "セレッソ大阪", 
         "神戸": "ヴィッセル神戸", "岡山": "ファジアーノ岡山", "広島": "サンフレッチェ広島", 
         "徳島": "徳島ヴォルティス", "愛媛": "愛媛ＦＣ", "今治": "ＦＣ今治", "福岡": "アビスパ福岡",
         "北九州": "ギラヴァンツ北九州", "鳥栖": "サガン鳥栖", "長崎": "V・ファーレン長崎",
         "熊本": "ロアッソ熊本", "大分": "大分トリニータ", "鹿児島": "鹿児島ユナイテッドＦＣ",
-        "マンU": "マンチェスター・ユナイテッド", "マンC": "マンチェスター・シティ", "フランクフ": "フランクフルト"
+        "マンU": "マンチェスター・ユナイテッド", "マンC": "マンチェスター_シティ", "フランクフ": "フランクフルト"
     }
     search_name = alias_map.get(toto_name, toto_name)
     for official_name, stats in raw_data.items():
@@ -110,13 +106,13 @@ def main():
     print("1. 今週のtoto対象対戦カードを自動取得中...")
     teams = get_current_toto_teams()
     
-    # Yahooから13試合取れなければ、中途半端なデータを残さず安全に処理を終了（スキップ）する
+    # 13試合のテーブルデータそのものが白紙の時だけ、安全に処理をスキップさせる
     if len(teams) < 13:
         print("\n==================================================")
-        print("【案内】今週の対戦カードを正しく取得できませんでした。")
-        print("データの一貫性を守るため、今回の処理をスキップして終了します。")
+        print(f"【案内】対象の13試合のデータテーブルが見つかりません（現在取得数: {len(teams)}組）。")
+        print("深夜の販売休止時間帯であるか、今節のカードが未公開のため、処理をスキップします。")
         print("==================================================")
-        sys.exit(0) # エラーを出さずに静かに終了
+        sys.exit(0)
     
     print(f"  -> 成功：今週の {len(teams)} 試合を正常に特定しました。")
     print("\n2. 各リーグの公式サイトから最新順位データを収集中...")
