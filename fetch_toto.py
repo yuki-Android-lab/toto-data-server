@@ -1,8 +1,11 @@
 import urllib.request
+from bs4 import BeautifulSoup
+import json
 import re
 
-def inspect_toto_html():
-    print("==================== 【事実確認】Yahoo! toto 生テキスト抽出 ====================")
+def get_toto_teams_from_yahoo():
+    """【本線】Yahoo! totoから対戦カードを取得（メンテナンス時は空リストを返す）"""
+    toto_teams = []
     url = "https://toto.yahoo.co.jp/toto/"
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
     
@@ -11,33 +14,175 @@ def inspect_toto_html():
         with urllib.request.urlopen(req) as response:
             html = response.read().decode('utf-8', errors='ignore')
         
-        # 1. ページ全体に「福岡」や「神戸」といった文字がそもそも含まれているか確認
-        # (これでアクセスしているURLが正しいかどうかが100%分かります)
-        has_fukuoka = "福岡" in html
-        has_kobe = "神戸" in html
-        print(f"■ キーワードチェック: 『福岡』の存在={has_fukuoka} / 『神戸』の存在={has_kobe}")
+        # メンテナンス画面の文言がある場合は、即座にYahooを諦めてリターン
+        if "システムメンテナンス" in html or "一時停止" in html:
+            print("  -> [情報] Yahoo! totoがメンテナンス中のため、バックアップサイトへ迂回します。")
+            return []
+            
+        soup = BeautifulSoup(html, 'html.parser')
         
-        # 2. HTMLが長すぎるため、aタグやdivタグなど、テキストを含んでいる主要な行を30行だけ抽出
-        print("\n■ HTML内のテキストエリア周辺の構造（抜粋）:")
-        lines = html.split('\n')
-        printed_count = 0
-        
-        for line in lines:
-            line_str = line.strip()
-            if not line_str:
-                continue
-                
-            # チーム名が入りそうな箇所（<a>タグ、<td>タグ、あるいはクラス指定がある行）を絞り込む
-            if any(kwd in line_str for kwd in ["<a", "<td", "class=", "team", "match"]):
-                # タグを極力見やすくするために、前後の文字も含めて出力
-                print(f"  行データ: {line_str[:120]}")
-                printed_count += 1
-                if printed_count >= 40: # 40行見れば、どういう規則でチーム名が並んでいるか必ず特定できます
-                    break
-                    
+        # メンテナンス中でなければ、対戦表の各行からチーム名を取得
+        rows = soup.find_all('tr', class_=re.compile(r'match|card|row'))
+        for row in rows:
+            cells = [td.text.strip() for td in row.find_all('td') if td.text.strip()]
+            if len(cells) >= 3:
+                # 投票率などのノイズ行を確実に弾き、純粋なチーム名ペアだけを抽出
+                clean_cells = [c for c in cells if "投票" not in c and "引き分け" not in c and "vs" not in c and "%" not in c]
+                if len(clean_cells) >= 2:
+                    home = re.sub(r'\s+', '', clean_cells[0])
+                    away = re.sub(r'\s+', '', clean_cells[1])
+                    if home and away and len(toto_teams) < 13:
+                        toto_teams.append((home, away))
+    except Exception:
+        pass
+    return toto_teams
+
+def get_toto_teams_from_totoone():
+    """【バックアップ】スポーツくじ公式 toto-oneの最新開催情報から13試合を取得"""
+    toto_teams = []
+    # 最新のtoto開催概要ページ
+    url = "https://www.toto-one.com/toto/"
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+    
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req) as response:
+            html = response.read().decode('utf-8', errors='ignore')
+            
+        soup = BeautifulSoup(html, 'html.parser')
+        # toto-oneの対戦カードテーブル構造をパース
+        # 各試合がtdやdivの対戦枠で囲まれているため、テキストからチーム名ペアを特定
+        tables = soup.find_all('table')
+        for table in tables:
+            rows = table.find_all('tr')
+            for row in rows:
+                cells = [td.text.strip() for td in row.find_all('td') if td.text.strip()]
+                # 通常、1試合の行に「ホーム」「アウェイ」または「vs」が含まれる
+                if len(cells) >= 2:
+                    # 順位や投票マルチ用文言を除外
+                    clean = [c for c in cells if not any(k in c for k in ["回", "％", "予想", "投票", "引き分け"])]
+                    if len(clean) >= 2 and len(clean[0]) <= 8 and len(clean[1]) <= 8:
+                        home = re.sub(r'\s+', '', clean[0])
+                        away = re.sub(r'\s+', '', clean[1])
+                        # 既知のJリーグチーム名や欧州チーム名が含まれるか簡易チェック
+                        if any(k in home for k in ["FC", "ＦＣ", "山", "川", "大", "東", "神", "鹿", "広", "福"]):
+                            if (home, away) not in toto_teams and len(toto_teams) < 13:
+                                toto_teams.append((home, away))
     except Exception as e:
-        print(f"【通信エラー】アクセス自体に失敗しています: {e}")
-    print("==========================================================================")
+        print(f"  -> [エラー] バックアップサイトからの取得にも失敗しました: {e}")
+    return toto_teams
+
+def get_official_standings():
+    """実績のある西暦なし固定URLから最新順位データを一発取得"""
+    raw_data = {}
+    urls = {
+        "J1": "https://www.jleague.jp/standings/j1/",
+        "J2": "https://www.jleague.jp/standings/j2/",
+        "J3": "https://www.jleague.jp/standings/j3/",
+        "プレミア": "https://soccer.yahoo.co.jp/ws/category/eng/standings",
+        "ブンデス": "https://soccer.yahoo.co.jp/ws/category/ger/standings"
+    }
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+    
+    for category, url in urls.items():
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req) as response:
+                html = response.read().decode('utf-8', errors='ignore')
+            
+            soup = BeautifulSoup(html, 'html.parser')
+            if "jleague" in url:
+                table = soup.find('table', class_='table-standings') or soup.find('table')
+                if not table: continue
+                for row in table.find_all('tr'):
+                    if row.find('th'): continue
+                    cols = row.find_all('td')
+                    if len(cols) < 3: continue
+                    try:
+                        rank = int(cols[0].text.strip())
+                        team_name = cols[1].text.strip()
+                        goals = int(cols[6].text.strip()) if len(cols) > 6 else 0
+                        raw_data[team_name] = {"rank": rank, "goals": goals}
+                    except ValueError:
+                        continue
+            else:
+                table = soup.find('table', class_='sn-table')
+                if not table: continue
+                for row in table.find_all('tr')[1:]:
+                    cols = row.find_all('td')
+                    if len(cols) < 7: continue
+                    team_name = cols[1].text.strip()
+                    raw_data[team_name] = {"rank": int(cols[0].text.strip()), "goals": int(cols[6].text.strip())}
+        except Exception:
+            pass
+    return raw_data
+
+def find_stats(toto_name, raw_data):
+    """チーム名の名寄せ（マッピング）"""
+    alias_map = {
+        "札幌": "コンサドーレ札幌", "仙台": "ベガルタ仙台", "いわき": "いわきＦＣ", 
+        "水戸": "水戸ホーリーホック", "栃木": "栃木ＳＣ", "群馬": "ザスパ群馬", 
+        "千葉": "ジェフユナイテッド千葉", "柏": "柏レイソル", "FC東京": "ＦＣ東京",
+        "東京V": "東京ヴェルディ", "町田": "ＦＣ町田ゼルビア", "川崎F": "川崎フロンターレ",
+        "横浜FM": "横浜Ｆ・マリノス", "横浜FC": "横浜ＦＣ", "湘南": "湘南ベルマーレ",
+        "甲府": "ヴァンフォーレ甲府", "新潟": "アルビレックス新潟", "清水": "清水エスパルス",
+        "磐田": "ジュビロ磐田", "藤枝": "藤枝ＭＹＦＣ", "名古屋": "名古屋グランパス", 
+        "京都": "京都サンガF.C.", "G大阪": "ガンバ大阪", "C大阪": "セレッソ大阪", 
+        "神戸": "ヴィッセル神戸", "岡山": "ファジアーノ岡山", "広島": "サンフレッチェ広島", 
+        "徳島": "徳島ヴォルティス", "愛媛": "愛媛ＦＣ", "今治": "ＦＣ今治", "福岡": "アビスパ福岡",
+        "北九州": "ギラヴァンツ北九州", "鳥栖": "サガン鳥栖", "長崎": "V・ファーレン長崎",
+        "熊本": "ロアッソ熊本", "大分": "大分トリニータ", "鹿児島": "鹿児島ユナイテッドＦＣ",
+        "マンU": "マンチェスター・ユナイテッド", "マンC": "マンチェスター・シティ", "フランクフ": "フランクフルト"
+    }
+    search_name = alias_map.get(toto_name, toto_name)
+    for official_name, stats in raw_data.items():
+        if (search_name in official_name) or (official_name in search_name):
+            return stats["rank"], stats["goals"]
+    return 10, 15 # マッチしない場合のデフォルト値
+
+def main():
+    print("1. 今週のtoto対象対戦カードを取得中...")
+    # まずは本線（Yahoo）を試す
+    teams = get_toto_teams_from_yahoo()
+    
+    # Yahooがメンテナンス等でダメなら、バックアップ（toto-one）から取得
+    if len(teams) < 13:
+        print("  -> Yahooから取得できなかったため、バックアップ用サイトからデータを抽出します...")
+        teams = get_toto_teams_from_totoone()
+    
+    if len(teams) < 13:
+        print("\n==================================================")
+        print("【警告】対戦カードが自動取得できないため予測が出来ません。")
+        print(f"（現在取得できたペア数: {len(teams)}組）")
+        print("==================================================")
+        return
+    
+    print(f"  -> 成功！ {len(teams)}試合のカードを特定しました。")
+    print("\n2. 各リーグの公式サイトから最新順位データを収集中...")
+    raw_data = get_official_standings()
+    
+    match_list = []
+    for i, (home, away) in enumerate(teams, 1):
+        home_rank, home_goals = find_stats(home, raw_data)
+        away_rank, away_goals = find_stats(away, raw_data)
+        
+        match_list.append({
+            "matchNo": i, "homeTeam": home, "awayTeam": away,
+            "homeRank": home_rank, "awayRank": away_rank,      
+            "homeGoalsFor": home_goals, "awayGoalsFor": away_goals,  
+            "homeInjuries": 0, "awayInjuries": 1, "weather": "晴",
+            "homeCompatibility": "拮抗", "homeTactics": "カウンター", "awayTactics": "ポゼッション",
+            "homeRecent": "普通", "awayRecent": "好調", "homeInterval": "中6日", "awayInterval": "中3日",
+            "homeRainWinRate": "45%", "awayRainWinRate": "55%"
+        })
+
+    with open("data.json", "w", encoding="utf-8") as f:
+        json.dump(match_list, f, ensure_ascii=False, indent=4)
+    print("\n--- data.json の保存が完了しました ---")
+
+    print("\n【自動取得・データ反映後の対戦一覧】")
+    for match in match_list:
+        print(f"第 {match['matchNo']:02d} 試合: {match['homeTeam']}({match['homeRank']}位) vs {match['awayTeam']}({match['awayRank']}位)")
 
 if __name__ == "__main__":
-    inspect_toto_html()
+    main()
