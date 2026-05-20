@@ -19,12 +19,10 @@ def get_official_standings():
         try:
             req = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(req) as response:
-                # ★文字化け対策：レスポンスからエンコーディング（utf-8やshift_jis）を自動取得
                 info = response.info()
                 charset = info.get_content_charset()
                 if not charset:
-                    charset = 'utf-8' # 取れない場合はutf-8をデフォルトに
-                
+                    charset = 'utf-8'
                 html = response.read().decode(charset, errors='ignore')
             
             soup = BeautifulSoup(html, 'html.parser')
@@ -32,13 +30,32 @@ def get_official_standings():
             if "jleague" in url:
                 table = soup.find('table', class_='table-standings')
                 if not table: continue
-                for row in table.find_all('tr')[1:]:
+                for row in table.find_all('tr'):
+                    # th（ヘッダー行）はスキップ
+                    if row.find('th'): continue
                     cols = row.find_all('td')
-                    if len(cols) < 8: continue
+                    if len(cols) < 5: continue
+                    
+                    # Jリーグ公式の正確な列配置に対応
+                    # 0列目:順位, 1列目:チーム名（画像やリンク等含む場合があるためtextで取得）
+                    rank_text = cols[0].text.strip()
                     team_name = cols[1].text.strip()
-                    rank = int(cols[0].text.strip())
-                    goals = int(cols[7].text.strip())
-                    raw_data[team_name] = {"rank": rank, "goals": goals}
+                    
+                    # 得点列（「得失点差」の手前にある「得点」の値を安全に探す）
+                    # 通常、試合数・勝・分・負・得点の順に並ぶため、列数が前後しても対応できるよう末尾側から逆算
+                    # Jリーグ公式順位表の「得点」は通常7番目（インデックス6）または8番目
+                    try:
+                        rank = int(rank_text)
+                        # 安全のため、得点が入っている可能性が最も高い列をチェック
+                        goals = int(cols[6].text.strip()) if len(cols) > 6 else 0
+                        
+                        # もし6番目が得失点差などの場合は別の列をフォールバック
+                        if goals > 150: # 明らかに異常な数値なら隣の列を見る
+                            goals = int(cols[5].text.strip())
+                            
+                        raw_data[team_name] = {"rank": rank, "goals": goals}
+                    except ValueError:
+                        continue
             else:
                 table = soup.find('table', class_='sn-table')
                 if not table: continue
@@ -59,14 +76,17 @@ def find_stats(toto_name, raw_data):
     alias_map = {
         "G大阪": "ガンバ大阪", "C大阪": "セレッソ大阪",
         "マンU": "マンチェスター・ユナイテッド", "マンC": "マンチェスター・シティ",
-        "フランクフ": "フランクフルト", "B・MG": "ボルシアMG", "レバーク": "レバークーゼン"
+        "フランクフ": "フランクフルト", "B・MG": "ボルシアMG", "レバーク": "レバークーゼン",
+        "川崎F": "川崎フロンターレ", "東京V": "東京ヴェルディ", "横浜FM": "横浜Ｆ・マリノス"
     }
     
     search_name = alias_map.get(toto_name, toto_name)
-    search_name = search_name.replace("FC", "ＦＣ")
+    # 念のため、全角半角のブレも吸収
+    search_name_zen = search_name.replace("FC", "ＦＣ")
+    search_name_han = search_name.replace("ＦＣ", "FC")
 
     for official_name, stats in raw_data.items():
-        if search_name in official_name or official_name in search_name:
+        if (search_name in official_name) or (search_name_zen in official_name) or (search_name_han in official_name) or (official_name in search_name):
             return stats["rank"], stats["goals"]
             
     return 10, 15
@@ -77,7 +97,6 @@ def main():
     
     match_list = []
     
-    # 今週の対戦カード
     teams = [
         ("福岡", "神戸"), ("鹿島", "FC東京"), ("京都", "長崎"), ("岡山", "C大阪"),
         ("東京V", "横浜FM"), ("広島", "名古屋"), ("柏", "千葉"), ("水戸", "川崎F"),
