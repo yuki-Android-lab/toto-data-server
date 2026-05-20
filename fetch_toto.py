@@ -5,12 +5,11 @@ import re
 import sys
 
 def get_current_toto_teams():
-    """セルの位置（インデックス）に一切依存せず、HTML内の『チーム名文字列』を
-    直接検出してホームとアウェイを特定する最も堅牢なロジックです。"""
+    """HTMLのテーブル構造を1行・1セルずつすべてログにダンプし、
+    パース失敗の真因を特定するためのデバッグ特化型関数です。"""
     toto_teams = []
     url = "https://toto.yahoo.co.jp/toto/?holdId=1631"
     
-    # 順位表マッピング用の全主要チームのキーワードリスト（これを元にセル内を識別）
     known_keywords = [
         "札幌", "仙台", "いわき", "水戸", "栃木", "群馬", "千葉", "柏", "東京", "町田", 
         "川崎", "横浜", "湘南", "甲府", "新潟", "清水", "磐田", "藤枝", "名古屋", "京都", 
@@ -23,43 +22,64 @@ def get_current_toto_teams():
     }
     
     try:
+        print(f"--- [DEBUG] URLへアクセス開始: {url} ---")
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req) as response:
             html = response.read().decode('utf-8', errors='ignore')
             
         soup = BeautifulSoup(html, 'html.parser')
         rows = soup.find_all('tr')
+        print(f"--- [DEBUG] 取得できた tr（行）の総数: {len(rows)} 行 ---")
         
-        for row in rows:
+        tr_count = 0
+        for r_idx, row in enumerate(rows):
             cells = row.find_all('td')
-            if len(cells) >= 3:
-                cell_texts = [td.text.strip().replace(" ", "").replace("　", "") for td in cells]
-                match_no_text = cell_texts[0]
+            if not cells:
+                continue
                 
-                # 1〜13の試合番号行であることを確認
+            tr_count += 1
+            cell_texts = [td.text.strip().replace(" ", "").replace("　", "") for td in cells]
+            match_no_text = cell_texts[0]
+            
+            # 最初のセルが数字っぽければ詳細をダンプ
+            if match_no_text.isdigit() or len(match_no_text) <= 3:
+                print(f"\n  [DEBUG_ROW] HTML行インデックス {r_idx} (有効行No.{tr_count}): 最初のセルの文字='{match_no_text}'")
+                print(f"    -> 検出された全セルデータ: {cell_texts}")
+                
                 if match_no_text.isdigit() and 1 <= int(match_no_text) <= 13:
+                    print(f"    -> [MATCH] 試合番号 {match_no_text} として認識。チーム抽出を開始します...")
                     detected_teams = []
                     
-                    # 行内の全セルを左からスキャンし、チーム名に該当する文字列を抽出
-                    for text in cell_texts:
-                        # 日付や投票率、ボタンなどの不要なノイズ行を徹底的に除外
+                    for c_idx, text in enumerate(cell_texts):
+                        # ノイズ除外の判定をログに残す
                         if any(x in text for x in ["投票", "%", "型", "引き分け", "vs", "VS", "通算", "/", "："]):
+                            print(f"      - セル[{c_idx}] '{text}' -> ノイズキーワードが含まれるためスキップ")
                             continue
                             
-                        # キーワードが含まれているか、かつ文字数が適切なチーム名らしい文字列か判定
-                        if any(kw in text for kw in known_keywords) and len(text) <= 8:
-                            # 重複を避けてストック（同じセルを複数回読まないよう配慮）
-                            if text not in detected_teams:
-                                detected_teams.append(text)
+                        if any(kw in text for kw in known_keywords):
+                            if len(text) <= 8:
+                                if text not in detected_teams:
+                                    detected_teams.append(text)
+                                    print(f"      - セル[{c_idx}] '{text}' -> 【チーム候補としてキープ】")
+                                else:
+                                    print(f"      - セル[{c_idx}] '{text}' -> 重複のためスキップ")
+                            else:
+                                print(f"      - セル[{c_idx}] '{text}' -> 文字数が長すぎるため(>8)チーム名除外")
+                        else:
+                            if text:
+                                print(f"      - セル[{c_idx}] '{text}' -> キーワード不一致")
                     
-                    # 1つの行から「ホーム」「アウェイ」の2チームが綺麗に検出できた場合のみ採用
+                    print(f"    -> [RESULT] この行から最終抽出されたペア: {detected_teams}")
                     if len(detected_teams) >= 2:
                         home = detected_teams[0]
                         away = detected_teams[1]
                         toto_teams.append((home, away))
+                        print(f"    -> 【確定マッピング】 ホーム: {home} vs アウェイ: {away}")
+                    else:
+                        print(f"    -> 【エラー】 チームペア（2つ以上）が揃わなかったため、この試合は追加されません")
 
     except Exception as e:
-        print(f"【エラー】対戦カードのパース中に問題が発生しました: {e}")
+        print(f"【システムエラー】パース処理自体がクラッシュしました: {e}")
         
     return toto_teams
 
@@ -115,7 +135,7 @@ def find_stats(toto_name, raw_data):
         "町田": "ＦＣ町田ゼルビア", "川崎F": "川崎フロンターレ", "横浜FM": "横浜Ｆ・マリノス", "横浜FC": "横浜ＦＣ", 
         "湘南": "湘南ベルマーレ", "甲府": "ヴァンフォーレ甲府", "新潟": "アルビレックス新潟", "清水": "清水エスパルス",
         "磐田": "ジュビロ磐田", "藤枝": "藤枝ＭＹＦＣ", "名古屋": "名古屋グランパス", "京都": "京都サンガF.C.", 
-        "G大阪": "ガンバ大阪", "C大阪": "セレッソ大阪", "神戸": "ヴィッセル神戸", "岡山": "ファジアーノ岡山", 
+        "G自動": "ガンバ大阪", "G大阪": "ガンバ大阪", "C大阪": "セレッソ大阪", "神戸": "ヴィッセル神戸", "岡山": "ファジアーノ岡山", 
         "広島": "サンフレッチェ広島", "徳島": "徳島ヴォルティス", "愛媛": "愛媛ＦＣ", "今治": "ＦＣ今治", 
         "福岡": "アビスパ福岡", "北九州": "ギラヴァンツ北九州", "鳥栖": "サガン鳥栖", "長崎": "V・ファーレン長崎",
         "熊本": "ロアッソ熊本", "大分": "大分トリニータ", "鹿児島": "鹿児島ユナイテッドＦＣ",
@@ -135,37 +155,3 @@ def main():
     teams = get_current_toto_teams()
     
     if len(teams) < 13:
-        print(f"\n【警告】13試合分のデータを正常に抽出できませんでした（現在特定数: {len(teams)}組）。")
-        sys.exit(0)
-        
-    print("\n==================================================")
-    print("【検証ログ】プログラムが識別した13試合（完全確定）")
-    print("==================================================")
-    for i, (home, away) in enumerate(teams, 1):
-        print(f"  [試合No.{i:02d}] ホーム: {home:<8} vs  アウェイ: {away}")
-    print("==================================================\n")
-    
-    print("2. 各リーグの公式サイトから最新順位データを収集中...")
-    raw_data = get_official_standings()
-    
-    match_list = []
-    for i, (home, away) in enumerate(teams, 1):
-        home_rank, home_goals = find_stats(home, raw_data)
-        away_rank, away_goals = find_stats(away, raw_data)
-        
-        match_list.append({
-            "matchNo": i, "homeTeam": home, "awayTeam": away,
-            "homeRank": home_rank, "awayRank": away_rank,      
-            "homeGoalsFor": home_goals, "awayGoalsFor": away_goals,  
-            "homeInjuries": 0, "awayInjuries": 1, "weather": "晴",
-            "homeCompatibility": "拮抗", "homeTactics": "カウンター", "awayTactics": "ポゼッション",
-            "homeRecent": "普通", "awayRecent": "好調", "homeInterval": "中6日", "awayInterval": "中3日",
-            "homeRainWinRate": "45%", "awayRainWinRate": "55%"
-        })
-
-    with open("data.json", "w", encoding="utf-8") as f:
-        json.dump(match_list, f, ensure_ascii=False, indent=4)
-    print("\n--- data.json の保存が完了しました ---")
-
-if __name__ == "__main__":
-    main()
