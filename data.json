@@ -2,7 +2,7 @@
     {
         "matchNo": 1,
         "homeTeam": "福岡",
-        "awayTeam": "神戸",
+        "awayTeam": "引き分け",
         "homeRank": 10,
         "awayRank": 10,
         "homeGoalsFor": 15,
@@ -23,7 +23,7 @@
     {
         "matchNo": 2,
         "homeTeam": "鹿島",
-        "awayTeam": "FC東京",
+        "awayTeam": "引き分け",
         "homeRank": 10,
         "awayRank": 10,
         "homeGoalsFor": 15,
@@ -44,7 +44,7 @@
     {
         "matchNo": 3,
         "homeTeam": "京都",
-        "awayTeam": "長崎",
+        "awayTeam": "引き分け",
         "homeRank": 10,
         "awayRank": 10,
         "homeGoalsFor": 15,
@@ -65,7 +65,7 @@
     {
         "matchNo": 4,
         "homeTeam": "岡山",
-        "awayTeam": "C大阪",
+        "awayTeam": "引き分け",
         "homeRank": 10,
         "awayRank": 10,
         "homeGoalsFor": 15,
@@ -85,8 +85,8 @@
     },
     {
         "matchNo": 5,
-        "homeTeam": "東京V",
-        "awayTeam": "横浜FM",
+        "homeTeam": "東京Ｖ",
+        "awayTeam": "引き分け",
         "homeRank": 10,
         "awayRank": 10,
         "homeGoalsFor": 15,
@@ -107,7 +107,7 @@
     {
         "matchNo": 6,
         "homeTeam": "広島",
-        "awayTeam": "名古屋",
+        "awayTeam": "引き分け",
         "homeRank": 10,
         "awayRank": 10,
         "homeGoalsFor": 15,
@@ -128,7 +128,7 @@
     {
         "matchNo": 7,
         "homeTeam": "柏",
-        "awayTeam": "千葉",
+        "awayTeam": "引き分け",
         "homeRank": 10,
         "awayRank": 10,
         "homeGoalsFor": 15,
@@ -149,7 +149,7 @@
     {
         "matchNo": 8,
         "homeTeam": "水戸",
-        "awayTeam": "川崎F",
+        "awayTeam": "引き分け",
         "homeRank": 10,
         "awayRank": 10,
         "homeGoalsFor": 15,
@@ -170,7 +170,7 @@
     {
         "matchNo": 9,
         "homeTeam": "清水",
-        "awayTeam": "G大阪",
+        "awayTeam": "引き分け",
         "homeRank": 10,
         "awayRank": 10,
         "homeGoalsFor": 15,
@@ -191,7 +191,7 @@
     {
         "matchNo": 10,
         "homeTeam": "札幌",
-        "awayTeam": "磐田",
+        "awayTeam": "引き分け",
         "homeRank": 10,
         "awayRank": 10,
         "homeGoalsFor": 15,
@@ -212,7 +212,7 @@
     {
         "matchNo": 11,
         "homeTeam": "仙台",
-        "awayTeam": "横浜FC",
+        "awayTeam": "引き分け",
         "homeRank": 10,
         "awayRank": 10,
         "homeGoalsFor": 15,
@@ -233,7 +233,7 @@
     {
         "matchNo": 12,
         "homeTeam": "徳島",
-        "awayTeam": "今治",
+        "awayTeam": "引き分け",
         "homeRank": 10,
         "awayRank": 10,
         "homeGoalsFor": 15,
@@ -254,7 +254,7 @@
     {
         "matchNo": 13,
         "homeTeam": "藤枝",
-        "awayTeam": "いわき",
+        "awayTeam": "引き分け",
         "homeRank": 10,
         "awayRank": 10,
         "homeGoalsFor": 15,
