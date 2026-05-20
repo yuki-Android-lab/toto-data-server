@@ -5,40 +5,70 @@ import re
 import sys
 
 def get_current_toto_teams():
-    """Yahoo! totoのHTMLから直接、homeTeamとawayTeamのクラスを持つ要素を抽出。
-    VSの画像化やテーブル構造に依存しない実証済みの解析ロジック。"""
+    """デバッグ機能を大幅に強化した対戦カード取得関数。
+    取得した生のHTMLの一部(IN)と、抽出を試みた結果(OUT)をログに強制出力します。"""
     toto_teams = []
     url = "https://toto.yahoo.co.jp/toto/"
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
     
+    print("\n--- 【DEBUG: IN】Yahoo! totoへのアクセスを開始します ---")
     try:
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req) as response:
             html = response.read().decode('utf-8', errors='ignore')
             
+        print(f"  -> 通信成功。取得したHTMLの総文字数: {len(html)} 文字")
+        
+        # 【INの検証】HTMLの先頭500文字と、怪しい箇所を部分出力
+        print("\n=== [DEBUG] 取得したHTMLの冒頭部分 ===")
+        print(html[:500])
+        print("=======================================")
+        
         soup = BeautifulSoup(html, 'html.parser')
         
-        # ページ内から homeTeam と awayTeam のクラスが付いた要素をすべて抽出
+        # クラス名による部分的な検証
         home_elements = soup.find_all(class_=re.compile(r'homeTeam'))
         away_elements = soup.find_all(class_=re.compile(r'awayTeam'))
         
-        # 取得できた数が一致し、かつ13試合以上ある場合にペアを組む
-        # （ノイズとなる空要素やヘッダーを除外しながら13組集める）
-        for home_el, away_el in zip(home_elements, away_elements):
+        print(f"\n=== [DEBUG: OUT] 抽出中間ステータス ===")
+        print(f"  ・検出された 'homeTeam' を含む要素数: {len(home_elements)} 個")
+        print(f"  ・検出された 'awayTeam' を含む要素数: {len(away_elements)} 個")
+        
+        # 実際に検出されたテキストの中身を、定石通りログに出力
+        if home_elements:
+            print("  ・最初に見つかったhomeTeam要素の生テキスト:", [el.text.strip() for el in home_elements[:3]])
+        if away_elements:
+            print("  ・最初に見つかったawayTeam要素の生テキスト:", [el.text.strip() for el in away_elements[:3]])
+        print("=======================================")
+
+        # ペアを組む処理
+        for i, (home_el, away_el) in enumerate(zip(home_elements, away_elements), 1):
             home_name = home_el.text.strip()
             away_name = away_el.text.strip()
             
-            # チーム名が空でなく、かつ「ホーム」「アウェイ」といったプレースホルダーでない場合
             if home_name and away_name and "チーム" not in home_name and "投票" not in home_name:
-                # 余分な空白や改行を完全に除去
                 home = re.sub(r'\s+', '', home_name)
                 away = re.sub(r'\s+', '', away_name)
-                
                 if home and away and len(toto_teams) < 13:
                     toto_teams.append((home, away))
-                    
+
+        print(f"\n  -> クラス名判定による最終取得ペア数: {len(toto_teams)} 組")
+        
+        # 【全滅時のバックアップ追跡ログ】もし0件だった場合、ページ内にどんなテキストがあるかヒントを出力
+        if len(toto_teams) == 0:
+            print("\n=== [DEBUG: 追跡] クラス名で取得できなかったため、ページ内のテキスト行を走査します ===")
+            all_text = soup.get_text()
+            lines = [line.strip() for line in all_text.split('\n') if line.strip()]
+            print(f"  ・ページ内の全テキスト行数: {len(lines)} 行")
+            print("  ・冒頭の30行をダンプします:")
+            for idx, line in enumerate(lines[:30]):
+                print(f"    [{idx+1}] {line}")
+            print("=======================================================================")
+
     except Exception as e:
-        print(f"【通信エラー】Yahoo! totoへのアクセスに失敗: {e}")
+        print(f"【DEBUG: エラー検出】通信または解析中に例外が発生しました: {e}")
+        import traceback
+        traceback.print_exc()
         
     return toto_teams
 
@@ -114,11 +144,10 @@ def main():
     print("1. 今週のtoto対象対戦カードを自動取得中...")
     teams = get_current_toto_teams()
     
-    # 13試合のデータがちゃんと取得できたか最終チェック
     if len(teams) < 13:
         print("\n==================================================")
-        print(f"【案内】対象の13試合のデータテーブルが見つかりません（現在取得数: {len(teams)}組）。")
-        print("深夜の販売休止時間帯であるか、今節のカードが未公開のため、処理をスキップします。")
+        print(f"【判定】対象の13試合を確定できませんでした（現在取得数: {len(teams)}組）。")
+        print("詳細な原因は上記の【DEBUG】ログにすべて出力されています。処理を終了します。")
         print("==================================================")
         sys.exit(0)
     
@@ -136,7 +165,7 @@ def main():
             "homeRank": home_rank, "awayRank": away_rank,      
             "homeGoalsFor": home_goals, "awayGoalsFor": away_goals,  
             "homeInjuries": 0, "awayInjuries": 1, "weather": "晴",
-            "homeCompatibility": "拮抗", "homeTactics": "カウンター", "awayTactics": "ポゼッション",
+            "homeCompatibility": "拮開", "homeTactics": "カウンター", "awayTactics": "ポゼッション",
             "homeRecent": "普通", "awayRecent": "好調", "homeInterval": "中6日", "awayInterval": "中3日",
             "homeRainWinRate": "45%", "awayRainWinRate": "55%"
         })
