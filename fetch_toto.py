@@ -81,8 +81,7 @@ def fetch_missing_players_count(team_name, api_key=None):
         
     if not api_key:
         import random
-        mock_count = random.randint(0, 2)
-        return mock_count
+        return random.randint(0, 2)
 
     try:
         url = f"https://api-football-v1.p.rapidapi.com/v3/injuries?team={english_name}"
@@ -101,7 +100,7 @@ def fetch_missing_players_count(team_name, api_key=None):
 def get_official_standings():
     raw_data = {}
     urls = {
-        "J1": "https://soccer.yahoo.co.jp/jleague/category/j1/standings",
+        "J1": "https://soccer.yahoo.co.jp/jleague/category/j1ss/standings",
         "J2": "https://soccer.yahoo.co.jp/jleague/category/j2/standings",
         "J3": "https://soccer.yahoo.co.jp/jleague/category/j3/standings",
         "プレミア": "https://soccer.yahoo.co.jp/ws/category/eng/standings",
@@ -117,7 +116,8 @@ def get_official_standings():
             with urllib.request.urlopen(req) as response:
                 html = response.read().decode('utf-8', errors='ignore')
             
-            soup = BeautifulSoup(html, 'utf-8', errors='ignore')
+            # パーサーの指定を正しい形に修正
+            soup = BeautifulSoup(html, 'html.parser')
             
             for row in soup.find_all('tr'):
                 cols = row.find_all('td')
@@ -152,16 +152,12 @@ def get_official_standings():
     return raw_data
 
 def find_stats(toto_name, raw_data):
-    """【重複衝突回避版】
-    大阪・東京などの重複しやすいチームを完全一致で確実にガードします。"""
     clean_toto_name = toto_name.replace(" ", "").replace("　", "")
     
-    # 1. 誤判定を絶対に防ぐための「完全一致（シールド）」マッピング
-    # Yahoo!上の表記（例: 「ガンバ大阪」「セレッソ大阪」「ＦＣ東京」「東京ヴェルディ」等）に直接紐付けます
     strict_map = {
         "G大阪": "ガンバ大阪",
         "C大阪": "セレッソ大阪",
-        "FC東京": "ＦＣ東京", # 全角半角どちらでも拾えるようループ側でもlower処理
+        "FC東京": "ＦＣ東京",
         "東京V": "東京ヴェルディ",
         "川崎F": "川崎フロンターレ",
         "横浜FM": "横浜Ｆ・マリノス",
@@ -170,14 +166,12 @@ def find_stats(toto_name, raw_data):
         "マンU": "マンチェスター・ｕ"
     }
     
-    # 衝突対象チームであれば、該当するYahoo!公式名側のデータをピンポイントでルックアップ
     if clean_toto_name in strict_map:
         target_official_name = strict_map[clean_toto_name].lower()
         for official_name, stats in raw_data.items():
             if official_name.lower() == target_official_name:
                 return stats["rank"], stats["goals"]
                 
-    # 2. 表記に重複リスクがないチームは、従来通りの柔軟な部分一致ループで処理
     search_name = clean_toto_name.lower()
     for official_name, stats in raw_data.items():
         off_name_clean = official_name.lower()
