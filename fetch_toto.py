@@ -5,18 +5,13 @@ import re
 import sys
 
 def get_current_toto_teams():
-    """スマホ版への強制転送を回避するため、holdId付きのPC版URLをダイレクトに指定。
-    確実に13試合のテキストが含まれるHTMLをロードします。"""
+    """PC版テーブルから、ホーム（インデックス2）とアウェイ（インデックス4）を
+    正確にピンポイントで抽出します。"""
     toto_teams = []
-    
-    # ログから判明した最新の開催回(1631)を含むPC版の直接URL
     url = "https://toto.yahoo.co.jp/toto/?holdId=1631"
     
-    # 完全にPC(Windows / Chrome)からのアクセスに見せかけるための厳密なヘッダー
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'ja,en-US;q=0.7,en;q=0.3'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
     
     try:
@@ -25,42 +20,41 @@ def get_current_toto_teams():
             html = response.read().decode('utf-8', errors='ignore')
             
         soup = BeautifulSoup(html, 'html.parser')
-        
-        # PC版の13試合テーブルに存在する matchNo を目印に全ての行を取得
         rows = soup.find_all('tr')
         
-        temp_teams = []
         for row in rows:
-            cells = [td.text.strip() for td in row.find_all('td')]
-            # PC版の対戦表は通常、1つの行に「試合番号」「ホームチーム」「アウェイチーム」等のデータが入る
-            if len(cells) >= 3:
-                # チーム名に余計な記号や％、投票などの文字が混ざっていないか、純粋な文字列を精査
-                clean_cells = [c for c in cells if c and not any(x in c for x in ["投票", "%", "引き分け", "vs", "VS", "通算"])]
-                if len(clean_cells) >= 2:
-                    # 最初の2つの有効な文字列をホーム、アウェイと仮定
-                    home = re.sub(r'\s+', '', clean_cells[0])
-                    away = re.sub(r'\s+', '', clean_cells[1])
+            cells = row.find_all('td')
+            if len(cells) >= 5:
+                cell_texts = [td.text.strip() for td in cells]
+                match_no_text = cell_texts[0]
+                
+                # 最初のセルが1〜13の数字である行を厳密にパース
+                if match_no_text.isdigit() and 1 <= int(match_no_text) <= 13:
                     
-                    # チーム名として明らかに不自然な文字（数字のみ等）を除外
-                    if home and away and not home.isdigit() and not away.isdigit():
-                        if len(home) <= 8 and len(away) <= 8:  # チーム名は通常短い
-                            temp_teams.append((home, away))
-
-        # 重複を排除しつつ、綺麗に13試合分を取り出す
-        seen = set()
-        for home, away in temp_teams:
-            pair = (home, away)
-            if pair not in seen and len(toto_teams) < 13:
-                seen.add(pair)
-                toto_teams.append(pair)
+                    # 【厳密な列固定】
+                    # インデックス2 ＝ ホームチーム（福岡、鹿島 など）
+                    # インデックス4 ＝ アウェイチーム（神戸、FC東京 など）
+                    home = re.sub(r'\s+', '', cell_texts[2])
+                    away = re.sub(r'\s+', '', cell_texts[4])
+                    
+                    # 不要な文字（ボタンの文字や記号）を排除
+                    home = re.sub(r'[\d%型得失点差ー\-/：:]', '', home)
+                    away = re.sub(r'[\d%型得失点差ー\-/：:]', '', away)
+                    
+                    for noise in ["投票", "通算", "ひきわけ", "引き分け", "VS", "vs", "情報"]:
+                        home = home.replace(noise, "")
+                        away = away.replace(noise, "")
+                    
+                    if home and away and len(home) <= 10 and len(away) <= 10:
+                        toto_teams.append((home, away))
 
     except Exception as e:
-        print(f"【通信エラー】Yahoo! totoへのアクセスに失敗: {e}")
+        print(f"【エラー】対戦カードの解析中に問題が発生しました: {e}")
         
     return toto_teams
 
 def get_official_standings():
-    """最新の順位表データを固定URLから取得"""
+    """各リーグの公式サイトから最新順位データを収集"""
     raw_data = {}
     urls = {
         "J1": "https://www.jleague.jp/standings/j1/",
@@ -87,7 +81,7 @@ def get_official_standings():
                     if len(cols) < 3: continue
                     try:
                         rank = int(cols[0].text.strip())
-                        team_name = cols[1].text.strip()
+                        team_name = cols[1].text.strip().replace(" ", "").replace("　", "")
                         goals = int(cols[6].text.strip()) if len(cols) > 6 else 0
                         raw_data[team_name] = {"rank": rank, "goals": goals}
                     except ValueError:
@@ -98,14 +92,14 @@ def get_official_standings():
                 for row in table.find_all('tr')[1:]:
                     cols = row.find_all('td')
                     if len(cols) < 7: continue
-                    team_name = cols[1].text.strip()
+                    team_name = cols[1].text.strip().replace(" ", "").replace("　", "")
                     raw_data[team_name] = {"rank": int(cols[0].text.strip()), "goals": int(cols[6].text.strip())}
         except Exception:
             pass
     return raw_data
 
 def find_stats(toto_name, raw_data):
-    """チーム名のマッピング"""
+    """toto表記の略称と順位表の正式名称をマッピング"""
     alias_map = {
         "札幌": "コンサドーレ札幌", "仙台": "ベガルタ仙台", "いわき": "いわきＦＣ", 
         "水戸": "水戸ホーリーホック", "栃木": "栃木ＳＣ", "群馬": "ザスパ群馬", 
@@ -121,10 +115,14 @@ def find_stats(toto_name, raw_data):
         "熊本": "ロアッソ熊本", "大分": "大分トリニータ", "鹿児島": "鹿児島ユナイテッドＦＣ",
         "マンU": "マンチェスター・ユナイテッド", "マンC": "マンチェスター・シティ", "フランクフ": "フランクフルト"
     }
-    search_name = alias_map.get(toto_name, toto_name)
+    
+    search_name = alias_map.get(toto_name, toto_name).replace(" ", "").replace("　", "").lower()
+    
     for official_name, stats in raw_data.items():
-        if (search_name in official_name) or (official_name in search_name):
+        off_name_clean = official_name.lower()
+        if (search_name in off_name_clean) or (off_name_clean in search_name):
             return stats["rank"], stats["goals"]
+            
     return 10, 15
 
 def main():
@@ -132,14 +130,17 @@ def main():
     teams = get_current_toto_teams()
     
     if len(teams) < 13:
-        print("\n==================================================")
-        print(f"【案内】対象の13試合を確定できませんでした（現在取得数: {len(teams)}組）。")
-        print("URLを再調整するか、今節のカードが公開されているかご確認ください。")
-        print("==================================================")
+        print(f"\n【警告】13試合分のデータを正しく抽出できませんでした（現在: {len(teams)}組）。")
         sys.exit(0)
+        
+    print("\n==================================================")
+    print("【検証ログ】プログラムが抽出した13試合（ズレの確認用）")
+    print("==================================================")
+    for i, (home, away) in enumerate(teams, 1):
+        print(f"  [試合No.{i:02d}] ホーム: {home}  vs  アウェイ: {away}")
+    print("==================================================\n")
     
-    print(f"  -> 成功：今週の {len(teams)} 試合を正常に特定しました。")
-    print("\n2. 各リーグの公式サイトから最新順位データを収集中...")
+    print("2. 各リーグの公式サイトから最新順位データを収集中...")
     raw_data = get_official_standings()
     
     match_list = []
@@ -148,13 +149,25 @@ def main():
         away_rank, away_goals = find_stats(away, raw_data)
         
         match_list.append({
-            "matchNo": i, "homeTeam": home, "awayTeam": away,
-            "homeRank": home_rank, "awayRank": away_rank,      
-            "homeGoalsFor": home_goals, "awayGoalsFor": away_goals,  
-            "homeInjuries": 0, "awayInjuries": 1, "weather": "晴",
-            "homeCompatibility": "拮抗", "homeTactics": "カウンター", "awayTactics": "ポゼッション",
-            "homeRecent": "普通", "awayRecent": "好調", "homeInterval": "中6日", "awayInterval": "中3日",
-            "homeRainWinRate": "45%", "awayRainWinRate": "55%"
+            "matchNo": i, 
+            "homeTeam": home, 
+            "awayTeam": away,
+            "homeRank": home_rank, 
+            "awayRank": away_rank,      
+            "homeGoalsFor": home_goals, 
+            "awayGoalsFor": away_goals,  
+            "homeInjuries": 0, 
+            "awayInjuries": 1, 
+            "weather": "晴",
+            "homeCompatibility": "拮抗", 
+            "homeTactics": "カウンター", 
+            "awayTactics": "ポゼッション",
+            "homeRecent": "普通", 
+            "awayRecent": "好調", 
+            "homeInterval": "中6日", 
+            "awayInterval": "中3日",
+            "homeRainWinRate": "45%", 
+            "awayRainWinRate": "55%"
         })
 
     with open("data.json", "w", encoding="utf-8") as f:
