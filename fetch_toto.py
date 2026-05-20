@@ -99,6 +99,7 @@ def fetch_missing_players_count(team_name, api_key=None):
 
 def get_official_standings():
     raw_data = {}
+    # 正しい「j1ss」のURLに戻しました
     urls = {
         "J1": "https://soccer.yahoo.co.jp/jleague/category/j1ss/standings",
         "J2": "https://soccer.yahoo.co.jp/jleague/category/j2/standings",
@@ -116,7 +117,6 @@ def get_official_standings():
             with urllib.request.urlopen(req) as response:
                 html = response.read().decode('utf-8', errors='ignore')
             
-            # パーサーの指定を正しい形に修正
             soup = BeautifulSoup(html, 'html.parser')
             
             for row in soup.find_all('tr'):
