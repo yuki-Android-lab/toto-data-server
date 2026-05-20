@@ -127,20 +127,19 @@ def get_official_standings():
             
             soup = BeautifulSoup(html, 'html.parser')
             
-            # 各テーブルごとにヘッダー（th）を解析して「得点」列の位置を特定する
             tables = soup.find_all('table')
             for table in tables:
-                # ヘッダー行を探す
-                headers_tr = table.find('tr')
+                # 1. ヘッダー行を解析して「得点」列の正確なインデックスを特定
                 goals_idx = -1
+                headers_tr = table.find('tr')
                 if headers_tr:
                     ths = [th.text.strip() for th in headers_tr.find_all(['th', 'td'])]
                     for idx, th_text in enumerate(ths):
-                        if '得点' in th_text or '得' in th_text:
+                        if th_text == '得点' or th_text == '得':
                             goals_idx = idx
                             break
                 
-                # テーブル内のデータ行をパース
+                # 2. テーブル内の各チーム行をパース
                 for row in table.find_all('tr'):
                     cols = row.find_all('td')
                     if len(cols) < 3: 
@@ -160,34 +159,29 @@ def get_official_standings():
                             is_match = True
                         elif team == "横浜FM" and "マリノス" in row_text:
                             is_match = True
-                        elif team == "マンC" and "マンチェスター・ｃ" in row_text.lower():
-                            is_match = True
-                        elif team == "マンU" and "マンチェスター・ｕ" in row_text.lower():
-                            is_match = True
 
                         if is_match:
                             try:
-                                # 1. 順位の確実な抽出（1列目から数字のみを抜く）
-                                rank_text = cols[0].text.strip()
-                                rank_match = re.search(r'\d+', rank_text)
-                                rank = int(rank_match.group()) if rank_match else 99
+                                # 順位の確実な抽出 (列の位置に依存せず、行の左側から最初に見つかる数字を順位とする)
+                                rank = 99
+                                for col in cols[:3]: # 先頭3列の中に必ず順位数字がある
+                                    r_match = re.search(r'^\d+$', col.text.strip())
+                                    if r_match:
+                                        rank = int(r_match.group())
+                                        break
                                 
-                                # 2. 得点数の確実な抽出
+                                # 得点数の確実な抽出 (ヘッダーと連動した列から引く)
                                 goals = 0
                                 if goals_idx != -1 and goals_idx < len(cols):
-                                    # ヘッダーから特定した列をピンポイントで取得
                                     g_txt = cols[goals_idx].text.strip()
                                     if g_txt.isdigit():
                                         goals = int(g_txt)
                                 else:
-                                    # ヘッダーがない場合のセーフティ：数字のみの列から末尾に近い適切な位置を探索
+                                    # ヘッダーが万が一取れなかった場合のフォールバック
                                     num_cols = [int(c.text.strip()) for c in cols if c.text.strip().isdigit()]
                                     if len(num_cols) >= 5:
-                                        goals = num_cols[-2] # 標準的な総得点の位置
-                                    elif len(num_cols) >= 2:
-                                        goals = num_cols[-1]
+                                        goals = num_cols[-2]
                                 
-                                # データを保存（すでに格納されていても、より新しいグループテーブルのデータ等で正しく上書き、あるいは保持）
                                 raw_data[team] = {"rank": rank, "goals": goals}
                             except Exception:
                                 continue
