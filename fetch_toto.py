@@ -198,9 +198,6 @@ def get_official_standings():
     return raw_data
 
 def fetch_recent_and_interval(target_teams, current_year=2026):
-    """
-    カップ戦等すべて統合された日程表から、各チームの直近5公式戦の勝敗と最新試合日を計算する
-    """
     schedule_data = {}
     url = "https://soccer.yahoo.co.jp/jleague/schedule"
     headers = {
@@ -214,13 +211,11 @@ def fetch_recent_and_interval(target_teams, current_year=2026):
         
         soup = BeautifulSoup(html, 'html.parser')
         
-        # 各試合の行を取得
         for row in soup.find_all('tr'):
             cols = row.find_all('td')
             if len(cols) < 4:
                 continue
             
-            # 日付情報の取得 (例: "5/19（火）")
             date_td = row.find_previous('td', class_='date') or row.find('td', class_='date')
             date_text = date_td.text.strip() if date_td else ""
             date_match = re.search(r'(\d+)/(\d+)', date_text)
@@ -230,23 +225,19 @@ def fetch_recent_and_interval(target_teams, current_year=2026):
             month, day = int(date_match.group(1)), int(date_match.group(2))
             match_dt = datetime(current_year, month, day)
             
-            # チーム名とスコアの抽出
             home_txt = cols[1].text.strip().replace(" ", "").replace("　", "")
             score_txt = cols[2].text.strip().replace(" ", "").replace("　", "")
             away_txt = cols[3].text.strip().replace(" ", "").replace("　", "")
             
-            # スコアのパース (例: "2 - 1")
             scores = re.findall(r'\d+', score_txt)
             if len(scores) < 2:
-                continue # まだ行われていない試合はスキップ
+                continue
                 
             home_score, away_score = int(scores[0]), int(scores[1])
             
-            # ターゲットリストにあるチーム名への正規化マッピング
             for team in target_teams:
                 norm_team = team.replace("Ｃ", "C").replace("Ｇ", "G").replace("Ｖ", "V").replace("Ｆ", "F")
                 
-                # Yahoo特有の表記揺れをクリアしてマッチング
                 is_home = (team == home_txt or ("ガンバ" in home_txt and norm_team=="G大阪") or ("セレッソ" in home_txt and norm_team=="C大阪") or ("ヴェルディ" in home_txt and norm_team=="東京V") or ("フロンターレ" in home_txt and norm_team=="川崎F") or ("ジュビロ" in home_txt and norm_team=="磐田") or ("マリノス" in home_txt and norm_team=="横浜FM"))
                 is_away = (team == away_txt or ("ガンバ" in away_txt and norm_team=="G大阪") or ("セレッソ" in away_txt and norm_team=="C大阪") or ("ヴェルディ" in away_txt and norm_team=="東京V") or ("フロンターレ" in away_txt and norm_team=="川崎F") or ("ジュビロ" in away_txt and norm_team=="磐田") or ("マリノス" in away_txt and norm_team=="横浜FM"))
                 
@@ -254,7 +245,6 @@ def fetch_recent_and_interval(target_teams, current_year=2026):
                     if norm_team not in schedule_data:
                         schedule_data[norm_team] = []
                     
-                    # 勝敗判定
                     result = "分"
                     if is_home:
                         if home_score > away_score: result = "勝"
@@ -275,7 +265,6 @@ def fetch_recent_and_interval(target_teams, current_year=2026):
 def calculate_recent_and_interval(team_name, schedule_data, toto_date_str, current_year=2026):
     norm_name = team_name.replace("Ｃ", "C").replace("Ｇ", "G").replace("Ｖ", "V").replace("Ｆ", "F")
     
-    # toto開催日のdatetimeオブジェクト作成
     t_match = re.search(r'(\d+)/(\d+)', toto_date_str)
     if t_match:
         toto_dt = datetime(current_year, int(t_match.group(1)), int(t_match.group(2)))
@@ -283,23 +272,18 @@ def calculate_recent_and_interval(team_name, schedule_data, toto_date_str, curre
         toto_dt = datetime(current_year, 5, 23)
         
     if norm_name not in schedule_data or not schedule_data[norm_name]:
-        return "普通", "中6日" # データがない場合のデフォルトセーフティ
+        return "普通", "中6日"
         
-    # 日付の降順（新しい順）にソート
     history = sorted(schedule_data[norm_name], key=lambda x: x["date"], reverse=True)
-    
-    # toto開催日「より前」の試合に絞り込む
     past_games = [g for g in history if g["date"] < toto_dt]
     
     if not past_games:
         return "普通", "中6日"
         
-    # 1. 試合間隔（Interval）の計算
     latest_game_date = past_games[0]["date"]
     days_diff = (toto_dt - latest_game_date).days
     interval_str = f"中{days_diff - 1}日" if days_diff > 1 else "連戦"
     
-    # 2. 直近5試合から調子（Recent）の判定
     recent_5 = past_games[:5]
     points = 0
     for g in recent_5:
@@ -361,7 +345,6 @@ def main():
         home_rank, home_goals = find_stats(display_home, raw_data)
         away_rank, away_goals = find_stats(away, raw_data)
         
-        # 統合日程データから、カップ戦を含んだ真の「調子」と「試合間隔」を抽出
         home_recent, home_interval = calculate_recent_and_interval(display_home, schedule_data, match_date)
         away_recent, away_interval = calculate_recent_and_interval(away, schedule_data, match_date)
         
@@ -381,4 +364,23 @@ def main():
             "awayRank": away_rank,      
             "homeGoalsFor": home_goals, 
             "awayGoalsFor": away_goals,  
-            "homeInjuries": home_injuries,
+            "homeInjuries": home_injuries,  
+            "awayInjuries": away_injuries,  
+            "weather": "晴",
+            "homeCompatibility": "拮抗", 
+            "homeTactics": "カウンター", 
+            "awayTactics": "ポゼッション",
+            "homeRecent": home_recent, 
+            "awayRecent": away_recent, 
+            "homeInterval": home_interval, 
+            "awayInterval": away_interval,
+            "homeRainWinRate": "45%", 
+            "awayRainWinRate": "55%"
+        })
+
+    with open("data.json", "w", encoding="utf-8") as f:
+        json.dump(match_list, f, ensure_ascii=False, indent=4)
+    print("\n--- data.json の保存が完了しました ---")
+
+if __name__ == "__main__":
+    main()
