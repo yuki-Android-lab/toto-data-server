@@ -5,8 +5,8 @@ import re
 import sys
 
 def get_current_toto_teams():
-    """Yahoo! totoのページから『vs』のテキスト構造を基準に対戦カードを直接抽出。
-    HTMLの複雑なテーブル構造やクラス名に依存しない確実な方式。"""
+    """Yahoo! totoのHTMLから直接、homeTeamとawayTeamのクラスを持つ要素を抽出。
+    VSの画像化やテーブル構造に依存しない実証済みの解析ロジック。"""
     toto_teams = []
     url = "https://toto.yahoo.co.jp/toto/"
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
@@ -18,28 +18,25 @@ def get_current_toto_teams():
             
         soup = BeautifulSoup(html, 'html.parser')
         
-        # ページ内のすべてのテキストを取得し、改行や空白で分割
-        all_text = soup.get_text()
-        lines = [line.strip() for line in all_text.split('\n') if line.strip()]
+        # ページ内から homeTeam と awayTeam のクラスが付いた要素をすべて抽出
+        home_elements = soup.find_all(class_=re.compile(r'homeTeam'))
+        away_elements = soup.find_all(class_=re.compile(r'awayTeam'))
         
-        # テキストの中から「vs」または「VS」が含まれる行を探す
-        for line in lines:
-            if 'vs' in line.lower():
-                # 「チームA vs チームB」 または 「チームA(J1) vs チームB(J1)」 のようなパターンを想定
-                # 不要な文字（投票率や％、スペース）を除去
-                match = re.search(r'([^\s\d%()]+)\s*[vV][sS]\s*([^\s\d%()]+)', line)
-                if match:
-                    home = match.group(1)
-                    away = match.group(2)
+        # 取得できた数が一致し、かつ13試合以上ある場合にペアを組む
+        # （ノイズとなる空要素やヘッダーを除外しながら13組集める）
+        for home_el, away_el in zip(home_elements, away_elements):
+            home_name = home_el.text.strip()
+            away_name = away_el.text.strip()
+            
+            # チーム名が空でなく、かつ「ホーム」「アウェイ」といったプレースホルダーでない場合
+            if home_name and away_name and "チーム" not in home_name and "投票" not in home_name:
+                # 余分な空白や改行を完全に除去
+                home = re.sub(r'\s+', '', home_name)
+                away = re.sub(r'\s+', '', away_name)
+                
+                if home and away and len(toto_teams) < 13:
+                    toto_teams.append((home, away))
                     
-                    # 共通のノイズワードが含まれていないかチェック
-                    noise_words = ["投票", "引き分け", "相手", "結果", "勝率", "データ"]
-                    if any(nw in home or nw in away for nw in noise_words):
-                        continue
-                        
-                    if home and away and len(toto_teams) < 13:
-                        toto_teams.append((home, away))
-                        
     except Exception as e:
         print(f"【通信エラー】Yahoo! totoへのアクセスに失敗: {e}")
         
