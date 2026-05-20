@@ -5,8 +5,8 @@ import re
 import sys
 
 def get_current_toto_teams():
-    """Yahoo! totoのページから今週の13試合の対戦カードを直接抽出。
-    お知らせ文（テキスト）の有無による誤判定を完全に排除。"""
+    """Yahoo! totoのページから『vs』のテキスト構造を基準に対戦カードを直接抽出。
+    HTMLの複雑なテーブル構造やクラス名に依存しない確実な方式。"""
     toto_teams = []
     url = "https://toto.yahoo.co.jp/toto/"
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
@@ -17,18 +17,29 @@ def get_current_toto_teams():
             html = response.read().decode('utf-8', errors='ignore')
             
         soup = BeautifulSoup(html, 'html.parser')
-        # 直接対戦カードのテーブル行（tr）だけを探しに行く
-        rows = soup.find_all('tr', class_=re.compile(r'match|card|row'))
         
-        for row in rows:
-            cells = [td.text.strip() for td in row.find_all('td') if td.text.strip()]
-            if len(cells) >= 3:
-                clean_cells = [c for c in cells if "投票" not in c and "引き分け" not in c and "vs" not in c and "%" not in c]
-                if len(clean_cells) >= 2:
-                    home = re.sub(r'\s+', '', clean_cells[0])
-                    away = re.sub(r'\s+', '', clean_cells[1])
+        # ページ内のすべてのテキストを取得し、改行や空白で分割
+        all_text = soup.get_text()
+        lines = [line.strip() for line in all_text.split('\n') if line.strip()]
+        
+        # テキストの中から「vs」または「VS」が含まれる行を探す
+        for line in lines:
+            if 'vs' in line.lower():
+                # 「チームA vs チームB」 または 「チームA(J1) vs チームB(J1)」 のようなパターンを想定
+                # 不要な文字（投票率や％、スペース）を除去
+                match = re.search(r'([^\s\d%()]+)\s*[vV][sS]\s*([^\s\d%()]+)', line)
+                if match:
+                    home = match.group(1)
+                    away = match.group(2)
+                    
+                    # 共通のノイズワードが含まれていないかチェック
+                    noise_words = ["投票", "引き分け", "相手", "結果", "勝率", "データ"]
+                    if any(nw in home or nw in away for nw in noise_words):
+                        continue
+                        
                     if home and away and len(toto_teams) < 13:
                         toto_teams.append((home, away))
+                        
     except Exception as e:
         print(f"【通信エラー】Yahoo! totoへのアクセスに失敗: {e}")
         
@@ -89,12 +100,12 @@ def find_stats(toto_name, raw_data):
         "横浜FM": "横浜Ｆ・マリノス", "横浜FC": "横浜ＦＣ", "湘南": "湘南ベルマーレ",
         "甲府": "ヴァンフォーレ甲府", "新潟": "アルビレックス新潟", "清水": "清水エスパルス",
         "磐田": "ジュビロ磐田", "藤枝": "藤枝ＭＹＦＣ", "名古屋": "名古屋グランパス", 
-        "京都": "京都サンガF.C.", "G伴": "ガンバ大阪", "G大阪": "ガンバ大阪", "C大阪": "セレッソ大阪", 
+        "京都": "京都サンガF.C.", "G大阪": "ガンバ大阪", "C大阪": "セレッソ大阪", 
         "神戸": "ヴィッセル神戸", "岡山": "ファジアーノ岡山", "広島": "サンフレッチェ広島", 
         "徳島": "徳島ヴォルティス", "愛媛": "愛媛ＦＣ", "今治": "ＦＣ今治", "福岡": "アビスパ福岡",
         "北九州": "ギラヴァンツ北九州", "鳥栖": "サガン鳥栖", "長崎": "V・ファーレン長崎",
         "熊本": "ロアッソ熊本", "大分": "大分トリニータ", "鹿児島": "鹿児島ユナイテッドＦＣ",
-        "マンU": "マンチェスター・ユナイテッド", "マンC": "マンチェスター_シティ", "フランクフ": "フランクフルト"
+        "マンU": "マンチェスター・ユナイテッド", "マンC": "マンチェスター・シティ", "フランクフ": "フランクフルト"
     }
     search_name = alias_map.get(toto_name, toto_name)
     for official_name, stats in raw_data.items():
@@ -106,7 +117,7 @@ def main():
     print("1. 今週のtoto対象対戦カードを自動取得中...")
     teams = get_current_toto_teams()
     
-    # 13試合のテーブルデータそのものが白紙の時だけ、安全に処理をスキップさせる
+    # 13試合のデータがちゃんと取得できたか最終チェック
     if len(teams) < 13:
         print("\n==================================================")
         print(f"【案内】対象の13試合のデータテーブルが見つかりません（現在取得数: {len(teams)}組）。")
