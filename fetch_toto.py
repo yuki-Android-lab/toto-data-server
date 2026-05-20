@@ -41,7 +41,7 @@ def get_toto_teams_from_totoone():
     """【バックアップ】スポーツくじ公式 toto-oneの最新開催情報から13試合を取得"""
     toto_teams = []
     # 最新のtoto開催概要ページ
-    url = "https://www.toto-one.com/toto/"
+    url = "https://www.toto-one.jp/prediction/"
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
     
     try:
