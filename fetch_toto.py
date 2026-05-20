@@ -4,6 +4,7 @@ import json
 import re
 import sys
 import os
+from datetime import datetime
 
 def get_current_toto_teams():
     toto_teams = []
@@ -101,7 +102,6 @@ def fetch_missing_players_count(team_name, api_key=None):
 
 def get_official_standings():
     raw_data = {}
-    # ご指摘通り、J2/J3は統合された特別大会用URL(j2j3ss)を使用します
     urls = {
         "J1": "https://soccer.yahoo.co.jp/jleague/category/j1ss/standings",
         "J2J3": "https://soccer.yahoo.co.jp/jleague/category/j2j3ss/standings",
@@ -127,7 +127,6 @@ def get_official_standings():
                 html = response.read().decode('utf-8', errors='ignore')
             
             soup = BeautifulSoup(html, 'html.parser')
-            
             tables = soup.find_all('table')
             for table in tables:
                 goals_idx = -1
@@ -198,6 +197,121 @@ def get_official_standings():
     print(f"--- [INFO] Yahoo!スポーツから計 {len(raw_data)} チームの順位情報をキャッシュしました ---")
     return raw_data
 
+def fetch_recent_and_interval(target_teams, current_year=2026):
+    """
+    カップ戦等すべて統合された日程表から、各チームの直近5公式戦の勝敗と最新試合日を計算する
+    """
+    schedule_data = {}
+    url = "https://soccer.yahoo.co.jp/jleague/schedule"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
+    
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req) as response:
+            html = response.read().decode('utf-8', errors='ignore')
+        
+        soup = BeautifulSoup(html, 'html.parser')
+        
+        # 各試合の行を取得
+        for row in soup.find_all('tr'):
+            cols = row.find_all('td')
+            if len(cols) < 4:
+                continue
+            
+            # 日付情報の取得 (例: "5/19（火）")
+            date_td = row.find_previous('td', class_='date') or row.find('td', class_='date')
+            date_text = date_td.text.strip() if date_td else ""
+            date_match = re.search(r'(\d+)/(\d+)', date_text)
+            if not date_match:
+                continue
+                
+            month, day = int(date_match.group(1)), int(date_match.group(2))
+            match_dt = datetime(current_year, month, day)
+            
+            # チーム名とスコアの抽出
+            home_txt = cols[1].text.strip().replace(" ", "").replace("　", "")
+            score_txt = cols[2].text.strip().replace(" ", "").replace("　", "")
+            away_txt = cols[3].text.strip().replace(" ", "").replace("　", "")
+            
+            # スコアのパース (例: "2 - 1")
+            scores = re.findall(r'\d+', score_txt)
+            if len(scores) < 2:
+                continue # まだ行われていない試合はスキップ
+                
+            home_score, away_score = int(scores[0]), int(scores[1])
+            
+            # ターゲットリストにあるチーム名への正規化マッピング
+            for team in target_teams:
+                norm_team = team.replace("Ｃ", "C").replace("Ｇ", "G").replace("Ｖ", "V").replace("Ｆ", "F")
+                
+                # Yahoo特有の表記揺れをクリアしてマッチング
+                is_home = (team == home_txt or ("ガンバ" in home_txt and norm_team=="G大阪") or ("セレッソ" in home_txt and norm_team=="C大阪") or ("ヴェルディ" in home_txt and norm_team=="東京V") or ("フロンターレ" in home_txt and norm_team=="川崎F") or ("ジュビロ" in home_txt and norm_team=="磐田") or ("マリノス" in home_txt and norm_team=="横浜FM"))
+                is_away = (team == away_txt or ("ガンバ" in away_txt and norm_team=="G大阪") or ("セレッソ" in away_txt and norm_team=="C大阪") or ("ヴェルディ" in away_txt and norm_team=="東京V") or ("フロンターレ" in away_txt and norm_team=="川崎F") or ("ジュビロ" in away_txt and norm_team=="磐田") or ("マリノス" in away_txt and norm_team=="横浜FM"))
+                
+                if is_home or is_away:
+                    if norm_team not in schedule_data:
+                        schedule_data[norm_team] = []
+                    
+                    # 勝敗判定
+                    result = "分"
+                    if is_home:
+                        if home_score > away_score: result = "勝"
+                        elif home_score < away_score: result = "負"
+                    else:
+                        if away_score > home_score: result = "勝"
+                        elif away_score < home_score: result = "負"
+                        
+                    schedule_data[norm_team].append({
+                        "date": match_dt,
+                        "result": result
+                    })
+    except Exception as e:
+        print(f"    [WARN] 公式戦スケジュールパース中に問題が発生しました: {e}")
+        
+    return schedule_data
+
+def calculate_recent_and_interval(team_name, schedule_data, toto_date_str, current_year=2026):
+    norm_name = team_name.replace("Ｃ", "C").replace("Ｇ", "G").replace("Ｖ", "V").replace("Ｆ", "F")
+    
+    # toto開催日のdatetimeオブジェクト作成
+    t_match = re.search(r'(\d+)/(\d+)', toto_date_str)
+    if t_match:
+        toto_dt = datetime(current_year, int(t_match.group(1)), int(t_match.group(2)))
+    else:
+        toto_dt = datetime(current_year, 5, 23)
+        
+    if norm_name not in schedule_data or not schedule_data[norm_name]:
+        return "普通", "中6日" # データがない場合のデフォルトセーフティ
+        
+    # 日付の降順（新しい順）にソート
+    history = sorted(schedule_data[norm_name], key=lambda x: x["date"], reverse=True)
+    
+    # toto開催日「より前」の試合に絞り込む
+    past_games = [g for g in history if g["date"] < toto_dt]
+    
+    if not past_games:
+        return "普通", "中6日"
+        
+    # 1. 試合間隔（Interval）の計算
+    latest_game_date = past_games[0]["date"]
+    days_diff = (toto_dt - latest_game_date).days
+    interval_str = f"中{days_diff - 1}日" if days_diff > 1 else "連戦"
+    
+    # 2. 直近5試合から調子（Recent）の判定
+    recent_5 = past_games[:5]
+    points = 0
+    for g in recent_5:
+        if g["result"] == "勝": points += 3
+        elif g["result"] == "分": points += 1
+        
+    if points >= 10: recent_str = "好調"
+    elif points <= 4: recent_str = "不調"
+    else: recent_str = "普通"
+    
+    return recent_str, interval_str
+
 def find_stats(toto_name, raw_data):
     clean_name = toto_name.replace(" ", "").replace("　", "")
     norm_name = clean_name.replace("Ｃ", "C").replace("Ｇ", "G").replace("Ｖ", "V").replace("Ｆ", "F")
@@ -220,14 +334,25 @@ def main():
         print(f"\n【警告】13試合分のデータを正常に抽出できませんでした。")
         sys.exit(0)
         
+    target_teams = [
+        "福岡", "神戸", "鹿島", "FC東京", "名古屋", "広島", "札幌", "柏", "浦和", 
+        "東京V", "東京Ｖ", "町田", "川崎F", "川崎Ｆ", "横浜FM", "湘南", "新潟", 
+        "磐田", "G大阪", "Ｇ大阪", "C大阪", "Ｃ大阪", "鳥栖", "京都", "清水", 
+        "横浜FC", "長崎", "仙台", "山形", "千葉", "岡山", "水戸", "徳島", "今治", 
+        "藤枝", "いわき", "マンC", "マンU", "アーセナル", "リバプール"
+    ]
+        
     print("\n2. 各リーグの最新順位データをYahoo!スポーツから収集中...")
     raw_data = get_official_standings()
     
+    print("\n3. 全コンペティション統合スケジュールから直近調子・試合間隔を算出中...")
+    schedule_data = fetch_recent_and_interval(target_teams)
+    
     api_key = os.environ.get("RAPIDAPI_KEY", None)
     if api_key:
-        print("\n3. GitHub SecretsからAPIキーを検出しました。本番通信を行います。")
+        print("\n4. GitHub SecretsからAPIキーを検出しました。本番通信を行います。")
     else:
-        print("\n3. APIキーが未設定のため、シミュレーション（モック）モードで処理します。")
+        print("\n4. APIキーが未設定のため、シミュレーション（モック）モードで処理します。")
         
     match_list = []
     for i, (home, away) in enumerate(teams, 1):
@@ -236,9 +361,13 @@ def main():
         home_rank, home_goals = find_stats(display_home, raw_data)
         away_rank, away_goals = find_stats(away, raw_data)
         
-        print(f"  [試合No.{i:02d}] 順位・欠場者マッピング確認:")
-        print(f"    -> ホーム: {display_home} ({home_rank}位 / 得点:{home_goals})")
-        print(f"    -> アウェイ: {away} ({away_rank}位 / 得点:{away_goals})")
+        # 統合日程データから、カップ戦を含んだ真の「調子」と「試合間隔」を抽出
+        home_recent, home_interval = calculate_recent_and_interval(display_home, schedule_data, match_date)
+        away_recent, away_interval = calculate_recent_and_interval(away, schedule_data, match_date)
+        
+        print(f"  [試合No.{i:02d}] 順位・状態判定:")
+        print(f"    -> ホーム: {display_home} ({home_rank}位) 調子:{home_recent} / 間隔:{home_interval}")
+        print(f"    -> アウェイ: {away} ({away_rank}位) 調子:{away_recent} / 間隔:{away_interval}")
         
         home_injuries = fetch_missing_players_count(display_home, api_key=api_key)
         away_injuries = fetch_missing_players_count(away, api_key=api_key)
@@ -252,23 +381,4 @@ def main():
             "awayRank": away_rank,      
             "homeGoalsFor": home_goals, 
             "awayGoalsFor": away_goals,  
-            "homeInjuries": home_injuries,  
-            "awayInjuries": away_injuries,  
-            "weather": "晴",
-            "homeCompatibility": "拮抗", 
-            "homeTactics": "カウンター", 
-            "awayTactics": "ポゼッション",
-            "homeRecent": "普通", 
-            "awayRecent": "好調", 
-            "homeInterval": "中6日", 
-            "awayInterval": "中3日",
-            "homeRainWinRate": "45%", 
-            "awayRainWinRate": "55%"
-        })
-
-    with open("data.json", "w", encoding="utf-8") as f:
-        json.dump(match_list, f, ensure_ascii=False, indent=4)
-    print("\n--- data.json の保存が完了しました ---")
-
-if __name__ == "__main__":
-    main()
+            "homeInjuries": home_injuries,
