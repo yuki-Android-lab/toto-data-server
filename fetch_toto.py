@@ -6,7 +6,6 @@ def get_official_standings():
     """全リーグの公式ページからデータを集め、{「公式チーム名」: {順位, 得点}} の辞書を作る"""
     raw_data = {}
     
-    # 巡回するURLの設定
     urls = {
         "J1": "https://www.jleague.jp/standings/j1/",
         "J2": "https://www.jleague.jp/standings/j2/",
@@ -20,16 +19,23 @@ def get_official_standings():
         try:
             req = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(req) as response:
-                soup = BeautifulSoup(response.read(), 'html.parser')
+                # ★文字化け対策：レスポンスからエンコーディング（utf-8やshift_jis）を自動取得
+                info = response.info()
+                charset = info.get_content_charset()
+                if not charset:
+                    charset = 'utf-8' # 取れない場合はutf-8をデフォルトに
+                
+                html = response.read().decode(charset, errors='ignore')
             
-            # Jリーグと欧州（スポナビ）でテーブルのクラス名が違うので切り分け
+            soup = BeautifulSoup(html, 'html.parser')
+            
             if "jleague" in url:
                 table = soup.find('table', class_='table-standings')
                 if not table: continue
                 for row in table.find_all('tr')[1:]:
                     cols = row.find_all('td')
                     if len(cols) < 8: continue
-                    team_name = cols[1].text.strip() # 例：「アビスパ福岡」
+                    team_name = cols[1].text.strip()
                     rank = int(cols[0].text.strip())
                     goals = int(cols[7].text.strip())
                     raw_data[team_name] = {"rank": rank, "goals": goals}
@@ -39,7 +45,7 @@ def get_official_standings():
                 for row in table.find_all('tr')[1:]:
                     cols = row.find_all('td')
                     if len(cols) < 7: continue
-                    team_name = cols[1].text.strip() # 例：「マンチェスター・ユナイテッド」
+                    team_name = cols[1].text.strip()
                     rank = int(cols[0].text.strip())
                     goals = int(cols[6].text.strip())
                     raw_data[team_name] = {"rank": rank, "goals": goals}
@@ -50,25 +56,19 @@ def get_official_standings():
 
 def find_stats(toto_name, raw_data):
     """totoのチーム名（略称）から、公式データの順位と得点を賢く検索する関数"""
-    # 1. 特殊な略称の変換マップ（ここだけ定義しておけば大阪ペアや欧州も安心）
     alias_map = {
         "G大阪": "ガンバ大阪", "C大阪": "セレッソ大阪",
         "マンU": "マンチェスター・ユナイテッド", "マンC": "マンチェスター・シティ",
         "フランクフ": "フランクフルト", "B・MG": "ボルシアMG", "レバーク": "レバークーゼン"
     }
     
-    # 変換マップにある場合は、公式名に化けさせる
     search_name = alias_map.get(toto_name, toto_name)
-    
-    # 全角・半角の「FC」などのブレを統一
     search_name = search_name.replace("FC", "ＦＣ")
 
-    # 2. 部分一致による自動マッチング（京都、柏、水戸、将来の昇格チームもここで全自動ヒット）
     for official_name, stats in raw_data.items():
         if search_name in official_name or official_name in search_name:
             return stats["rank"], stats["goals"]
             
-    # 見つからない場合は初期値を返す
     return 10, 15
 
 def main():
@@ -85,7 +85,6 @@ def main():
     ]
     
     for i, (home, away) in enumerate(teams, 1):
-        # 賢くなった検索ロジックで本物のデータを取得
         home_rank, home_goals = find_stats(home, raw_data)
         away_rank, away_goals = find_stats(away, raw_data)
         
