@@ -101,10 +101,10 @@ def fetch_missing_players_count(team_name, api_key=None):
 
 def get_official_standings():
     raw_data = {}
+    # ご指摘通り、J2/J3は統合された特別大会用URL(j2j3ss)を使用します
     urls = {
         "J1": "https://soccer.yahoo.co.jp/jleague/category/j1ss/standings",
-        "J2": "https://soccer.yahoo.co.jp/jleague/category/j2/standings",
-        "J3": "https://soccer.yahoo.co.jp/jleague/category/j3/standings",
+        "J2J3": "https://soccer.yahoo.co.jp/jleague/category/j2j3ss/standings",
         "プレミア": "https://soccer.yahoo.co.jp/ws/category/eng/standings",
         "ブンデス": "https://soccer.yahoo.co.jp/ws/category/ger/standings"
     }
@@ -112,7 +112,6 @@ def get_official_standings():
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
     
-    # 全角・半角のどちらで来てもいいように網羅したターゲットリスト
     target_teams = [
         "福岡", "神戸", "鹿島", "FC東京", "名古屋", "広島", "札幌", "柏", "浦和", 
         "東京V", "東京Ｖ", "町田", "川崎F", "川崎Ｆ", "横浜FM", "湘南", "新潟", 
@@ -148,17 +147,14 @@ def get_official_standings():
                     col_texts = [c.text.strip().replace(" ", "").replace("　", "") for c in cols]
                     
                     for team in target_teams:
-                        # 全角・半角どちらかの表記ですでに保存済みの場合はスキップ
                         norm_team = team.replace("Ｃ", "C").replace("Ｇ", "G").replace("Ｖ", "V").replace("Ｆ", "F")
                         if norm_team in raw_data:
                             continue
                             
                         is_team_row = False
                         for cell_text in col_texts:
-                            # 1. 完全一致判定
                             if cell_text == team:
                                 is_team_row = True
-                            # 2. Yahoo!の漢字・カタカナ正式表記とのマッチング（全角・半角の両方に対応）
                             elif (team in ["G大阪", "Ｇ大阪"]) and "ガンバ大阪" in cell_text:
                                 is_team_row = True
                             elif (team in ["C大阪", "Ｃ大阪"]) and "セレッソ大阪" in cell_text:
@@ -191,7 +187,6 @@ def get_official_standings():
                                     if len(num_cols) >= 5:
                                         goals = num_cols[-2]
                                 
-                                # 内部では半角に統一して保存
                                 raw_data[norm_team] = {"rank": rank, "goals": goals}
                             except Exception:
                                 continue
@@ -204,7 +199,6 @@ def get_official_standings():
     return raw_data
 
 def find_stats(toto_name, raw_data):
-    # 検索時も半角に正規化してルックアップする
     clean_name = toto_name.replace(" ", "").replace("　", "")
     norm_name = clean_name.replace("Ｃ", "C").replace("Ｇ", "G").replace("Ｖ", "V").replace("Ｆ", "F")
     
