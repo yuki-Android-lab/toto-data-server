@@ -2,6 +2,7 @@ import urllib.request
 from bs4 import BeautifulSoup
 import json
 from datetime import datetime
+import re # ★最上部で確実に正規表現モジュールをインポートします
 
 def get_current_toto_teams():
     """Yahoo! totoの最新開催ページから、今週の対象13試合のチーム名を自動取得する"""
@@ -16,7 +17,7 @@ def get_current_toto_teams():
         
         soup = BeautifulSoup(html, 'html.parser')
         
-        # テーブル行の抽出
+        # テーブル行の抽出（reモジュールが正常に定義されたことで動作します）
         rows = soup.find_all('tr', class_=re.compile(r'match|card|row'))
         if not rows:
             table = soup.find('table', class_='toto-table') or soup.find('table')
@@ -114,11 +115,9 @@ def find_stats(toto_name, raw_data):
     return 10, 15
 
 def main():
-    import re
     print("1. 今週のtoto対象対戦カードを自動取得中...")
     teams = get_current_toto_teams()
     
-    # ★ご指摘通りのチェックロジック。取得数が13試合に満たない場合は即座に中断
     if len(teams) < 13:
         print("\n==================================================")
         print("【警告】対戦カードが自動取得できないため予測が出来ません。")
