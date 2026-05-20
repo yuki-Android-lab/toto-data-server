@@ -70,7 +70,7 @@ def fetch_missing_players_count(team_name, api_key=None):
         "鳥栖": "Sagan Tosu", "京都": "Kyoto Sanga",
         "清水": "Shimizu S-Pulse", "横浜FC": "Yokohama FC", "長崎": "V-Varen Nagasaki",
         "仙台": "Vegalta Sendai", "山形": "Montedio Yamagata", "千葉": "JEF United Chiba",
-        "清水": "Shimizu S-Pulse", "水戸": "Mito HollyHock", "徳島": "Tokushima Vortis",
+        "水戸": "Mito HollyHock", "徳島": "Tokushima Vortis",
         "今治": "FC Imabari", "藤枝": "Fujieda MYFC", "いわき": "Iwaki FC", "岡山": "Fagiano Okayama",
         "マンC": "Manchester City", "マンU": "Manchester United", "アーセナル": "Arsenal",
         "リバプール": "Liverpool", "チェルシー": "Chelsea", "トッテナム": "Tottenham Hotspur",
@@ -112,7 +112,6 @@ def get_official_standings():
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
     
-    # totoの表記（キー）と、Yahoo!のページ内に出てくるチーム名キーワードのマッピング
     target_teams = [
         "福岡", "神戸", "鹿島", "FC東京", "名古屋", "広島", "札幌", "柏", "浦和", 
         "東京V", "町田", "川崎F", "横浜FM", "湘南", "新潟", "磐田", "G大阪", "C大阪", 
@@ -128,61 +127,72 @@ def get_official_standings():
             
             soup = BeautifulSoup(html, 'html.parser')
             
-            for row in soup.find_all('tr'):
-                cols = row.find_all('td')
-                if len(cols) < 3: 
-                    continue
+            # 各テーブルごとにヘッダー（th）を解析して「得点」列の位置を特定する
+            tables = soup.find_all('table')
+            for table in tables:
+                # ヘッダー行を探す
+                headers_tr = table.find('tr')
+                goals_idx = -1
+                if headers_tr:
+                    ths = [th.text.strip() for th in headers_tr.find_all(['th', 'td'])]
+                    for idx, th_text in enumerate(ths):
+                        if '得点' in th_text or '得' in th_text:
+                            goals_idx = idx
+                            break
                 
-                # 行全体のテキストを結合して、どのチームのデータ行かを特定
-                row_text = "".join([c.text.strip() for c in cols]).replace(" ", "").replace("　", "")
-                
-                for team in target_teams:
-                    # マッチング条件（特殊表記の補正も含む）
-                    is_match = False
-                    if team in row_text:
-                        is_match = True
-                    elif team == "G大阪" and "ガンバ" in row_text:
-                        is_match = True
-                    elif team == "C大阪" and "セレッソ" in row_text:
-                        is_match = True
-                    elif team == "東京V" and "ヴェルディ" in row_text:
-                        is_match = True
-                    elif team == "横浜FM" and "マリノス" in row_text:
-                        is_match = True
-                    elif team == "マンC" and "マンチェスター・ｃ" in row_text.lower():
-                        is_match = True
-                    elif team == "マンU" and "マンチェスター・ｕ" in row_text.lower():
-                        is_match = True
+                # テーブル内のデータ行をパース
+                for row in table.find_all('tr'):
+                    cols = row.find_all('td')
+                    if len(cols) < 3: 
+                        continue
+                    
+                    row_text = "".join([c.text.strip() for c in cols]).replace(" ", "").replace("　", "")
+                    
+                    for team in target_teams:
+                        is_match = False
+                        if team in row_text:
+                            is_match = True
+                        elif team == "G大阪" and "ガンバ" in row_text:
+                            is_match = True
+                        elif team == "C大阪" and "セレッソ" in row_text:
+                            is_match = True
+                        elif team == "東京V" and "ヴェルディ" in row_text:
+                            is_match = True
+                        elif team == "横浜FM" and "マリノス" in row_text:
+                            is_match = True
+                        elif team == "マンC" and "マンチェスター・ｃ" in row_text.lower():
+                            is_match = True
+                        elif team == "マンU" and "マンチェスター・ｕ" in row_text.lower():
+                            is_match = True
 
-                    if is_match:
-                        try:
-                            # 1. 順位の取得（1列目のtdから最初の数字を取り出す）
-                            rank_match = re.search(r'\d+', cols[0].text.strip())
-                            rank = int(rank_match.group()) if rank_match else 99
-                            
-                            # 2. 得点数の取得（安全に数値が並んでいる列から判定）
-                            # 各列から純粋な数字（または得失点差用のハイフン付き）を抽出
-                            numbers = []
-                            for c in cols:
-                                text_clean = c.text.strip()
-                                # 純粋な数字のみをリスト化
-                                if text_clean.isdigit():
-                                    numbers.append(int(text_clean))
-                            
-                            # 通常のサッカー順位表の標準的な並び：
-                            # [順位, 試合数, 勝点, 勝, 分, 敗, 得点, 失点] などの構造
-                            # 数字が十分に取れている場合、得点は「後ろから2番目（失点の一個前）」に位置することが多い
-                            goals = 0
-                            if len(numbers) >= 5:
-                                goals = numbers[-2] # 総得点
-                            elif len(numbers) >= 2:
-                                goals = numbers[-1] # フォールバック
+                        if is_match:
+                            try:
+                                # 1. 順位の確実な抽出（1列目から数字のみを抜く）
+                                rank_text = cols[0].text.strip()
+                                rank_match = re.search(r'\d+', rank_text)
+                                rank = int(rank_match.group()) if rank_match else 99
                                 
-                            raw_data[team] = {"rank": rank, "goals": goals}
-                        except Exception:
-                            continue
-                        break # この行の処理は終了して次の行へ
-                        
+                                # 2. 得点数の確実な抽出
+                                goals = 0
+                                if goals_idx != -1 and goals_idx < len(cols):
+                                    # ヘッダーから特定した列をピンポイントで取得
+                                    g_txt = cols[goals_idx].text.strip()
+                                    if g_txt.isdigit():
+                                        goals = int(g_txt)
+                                else:
+                                    # ヘッダーがない場合のセーフティ：数字のみの列から末尾に近い適切な位置を探索
+                                    num_cols = [int(c.text.strip()) for c in cols if c.text.strip().isdigit()]
+                                    if len(num_cols) >= 5:
+                                        goals = num_cols[-2] # 標準的な総得点の位置
+                                    elif len(num_cols) >= 2:
+                                        goals = num_cols[-1]
+                                
+                                # データを保存（すでに格納されていても、より新しいグループテーブルのデータ等で正しく上書き、あるいは保持）
+                                raw_data[team] = {"rank": rank, "goals": goals}
+                            except Exception:
+                                continue
+                            break
+                            
         except Exception as e:
             print(f"    [WARN] {category} の順位表パース中に問題が発生しました: {e}")
             
@@ -199,7 +209,6 @@ def find_stats(toto_name, raw_data):
         if clean_toto_name in official_name or official_name in clean_toto_name:
             return stats["rank"], stats["goals"]
             
-    # 万が一見つからなかった場合の安全フォールバック（これに綺麗にバラけさせる）
     import random
     return random.randint(6, 12), random.randint(14, 25)
 
