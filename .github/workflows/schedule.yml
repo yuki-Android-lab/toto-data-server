@@ -25,6 +25,8 @@ jobs:
         pip install beautifulsoup4
 
     - name: Run script
+      env:
+        RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
       run: python fetch_toto.py
 
     - name: Commit and Push changes
