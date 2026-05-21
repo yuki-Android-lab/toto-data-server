@@ -6,6 +6,7 @@ import re
 import sys
 import os
 from datetime import datetime
+import time  # ★追加：10秒スリープ（time.sleep）を動かすために必須のインポート
 
 # 表記ゆれを吸収するための共通正規化関数
 def normalize_team_name(name):
@@ -229,7 +230,6 @@ def calculate_interval_by_data(team_name, schedule_map, toto_date_str, current_y
         
     return recent_str, interval_str
 
-# ★修正：API-Football本物のホスト名（api-football-v1.p.rapidapi.com）に修正
 def fetch_team_injuries(api_key, target_teams):
     print("\n[API] API-Football からリアルタイム離脱者データを取得中...")
     injury_summary = {}
@@ -241,11 +241,17 @@ def fetch_team_injuries(api_key, target_teams):
     
     current_season = 2026
     
-    for team in target_teams:
+    # ★★★ 正しい位置への移動：APIリクエストを送るループの内部に設置 ★★★
+    for idx, team in enumerate(target_teams):
         team_id = J_TEAM_IDS.get(team)
         if not team_id:
             injury_summary[team] = "情報なし"
             continue
+            
+        # 1回目のループ（idx == 0）は即実行し、2回目（idx > 0）以降の通信の直前に10秒スリープを挟む
+        if idx > 0:
+            print(f"API負荷軽減のため、次のチームを取得する前に10秒間スリープします... (進捗: {idx}/{len(target_teams)})")
+            time.sleep(10)
             
         # API-Footballの正規の負傷者エンドポイントURL
         url = f"https://api-football-v1.p.rapidapi.com/v3/injuries?team={team_id}&season={current_season}"
@@ -342,7 +348,7 @@ def main():
             "homeInjuries": home_injuries,
             "awayInjuries": away_injuries
         })
-
+        
     with open("data.json", "w", encoding="utf-8") as f:
         json.dump(match_list, f, ensure_ascii=False, indent=4)
     print("\n--- data.json の保存が完了しました ---")
