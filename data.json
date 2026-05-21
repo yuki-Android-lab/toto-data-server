@@ -7,7 +7,7 @@
         "homeRank": 9,
         "awayRank": 1,
         "homeRecent": "普通",
-        "awayRecent": "好調",
+        "awayRecent": "普通",
         "homeInterval": "中12日",
         "awayInterval": "中5日"
     },
@@ -18,10 +18,10 @@
         "awayTeam": "FC東京",
         "homeRank": 1,
         "awayRank": 2,
-        "homeRecent": "好調",
+        "homeRecent": "普通",
         "awayRecent": "普通",
         "homeInterval": "中5日",
-        "awayInterval": "中6日"
+        "awayInterval": "中5日"
     },
     {
         "holdId": 1631,
@@ -30,10 +30,10 @@
         "awayTeam": "長崎",
         "homeRank": 10,
         "awayRank": 8,
-        "homeRecent": "不調",
-        "awayRecent": "好調",
-        "homeInterval": "中6日",
-        "awayInterval": "中6日"
+        "homeRecent": "普通",
+        "awayRecent": "普通",
+        "homeInterval": "中5日",
+        "awayInterval": "中5日"
     },
     {
         "holdId": 1631,
@@ -43,7 +43,7 @@
         "homeRank": 5,
         "awayRank": 3,
         "homeRecent": "普通",
-        "awayRecent": "好調",
+        "awayRecent": "普通",
         "homeInterval": "中6日",
         "awayInterval": "中6日"
     },
@@ -56,7 +56,7 @@
         "awayRank": 9,
         "homeRecent": "普通",
         "awayRecent": "普通",
-        "homeInterval": "中10日",
+        "homeInterval": "中6日",
         "awayInterval": "中6日"
     },
     {
@@ -67,7 +67,7 @@
         "homeRank": 4,
         "awayRank": 2,
         "homeRecent": "普通",
-        "awayRecent": "好調",
+        "awayRecent": "普通",
         "homeInterval": "中5日",
         "awayInterval": "中5日"
     },
@@ -80,8 +80,8 @@
         "awayRank": 10,
         "homeRecent": "普通",
         "awayRecent": "普通",
-        "homeInterval": "中6日",
-        "awayInterval": "中6日"
+        "homeInterval": "中5日",
+        "awayInterval": "中5日"
     },
     {
         "holdId": 1631,
@@ -92,8 +92,8 @@
         "awayRank": 6,
         "homeRecent": "普通",
         "awayRecent": "普通",
-        "homeInterval": "中6日",
-        "awayInterval": "中6日"
+        "homeInterval": "中5日",
+        "awayInterval": "中5日"
     },
     {
         "holdId": 1631,
@@ -114,7 +114,7 @@
         "awayTeam": "磐田",
         "homeRank": 2,
         "awayRank": 8,
-        "homeRecent": "不調",
+        "homeRecent": "普通",
         "awayRecent": "普通",
         "homeInterval": "中5日",
         "awayInterval": "中5日"
@@ -126,10 +126,10 @@
         "awayTeam": "横浜FC",
         "homeRank": 1,
         "awayRank": 5,
-        "homeRecent": "好調",
+        "homeRecent": "普通",
         "awayRecent": "普通",
-        "homeInterval": "中6日",
-        "awayInterval": "中6日"
+        "homeInterval": "中5日",
+        "awayInterval": "中5日"
     },
     {
         "holdId": 1631,
@@ -140,8 +140,8 @@
         "awayRank": 7,
         "homeRecent": "普通",
         "awayRecent": "普通",
-        "homeInterval": "中6日",
-        "awayInterval": "中6日"
+        "homeInterval": "中5日",
+        "awayInterval": "中5日"
     },
     {
         "holdId": 1631,
@@ -152,7 +152,7 @@
         "awayRank": 3,
         "homeRecent": "普通",
         "awayRecent": "普通",
-        "homeInterval": "中6日",
-        "awayInterval": "中6日"
+        "homeInterval": "中5日",
+        "awayInterval": "中5日"
     }
 ]
