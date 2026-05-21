@@ -236,7 +236,7 @@ def fetch_team_injuries(api_key, target_teams):
     
     headers = {
         'X-RapidAPI-Key': api_key,
-        'X-RapidAPI-Host': 'api-football-v1.p.rapidapi.com'
+        'X-RapidAPI-Host': 'free-api-live-football-data.p.rapidapi.com'
     }
     
     current_season = 2026
