@@ -25,7 +25,7 @@ def normalize_team_name(name):
             return v
     return norm
 
-# ★本命API（API-Football）が認識できるJリーグチームIDのマッピング辞書
+# 本命API（API-Football）が認識できるJリーグチームIDのマッピング辞書
 J_TEAM_IDS = {
     "福岡": 4124, "神戸": 302, "鹿島": 294, "FC東京": 298, 
     "京都": 4121, "長崎": 2351, "岡山": 2348, "C大阪": 301, 
@@ -207,7 +207,7 @@ def fetch_real_past_games(urls, current_year=2026):
 def calculate_interval_by_data(team_name, schedule_map, toto_date_str, current_year=2026):
     norm_name = normalize_team_name(team_name)
     toto_dt = datetime(current_year, 5, 23)
-    if norm_name in ["岡山", "C伴島", "東京V", "横浜FM", "清水", "G大阪"]:
+    if norm_name in ["岡山", "C大阪", "東京V", "横浜FM", "清水", "G大阪"]:
         toto_dt = datetime(current_year, 5, 24)
         
     past_dates = schedule_map.get(norm_name, [])
@@ -229,29 +229,26 @@ def calculate_interval_by_data(team_name, schedule_map, toto_date_str, current_y
         
     return recent_str, interval_str
 
-# ★修正：API-Footballの正式な負傷者（injuries）エンドポイントへ、チームIDを使って正確に通信するロジック
+# ★修正：API-Football本物のホスト名（api-football-v1.p.rapidapi.com）に修正
 def fetch_team_injuries(api_key, target_teams):
     print("\n[API] API-Football からリアルタイム離脱者データを取得中...")
     injury_summary = {}
     
     headers = {
         'X-RapidAPI-Key': api_key,
-        'X-RapidAPI-Host': 'free-api-live-football-data.p.rapidapi.com'
+        'X-RapidAPI-Host': 'api-football-v1.p.rapidapi.com'
     }
     
-    # 2026シーズン（API-Football側の指定用）
     current_season = 2026
     
     for team in target_teams:
         team_id = J_TEAM_IDS.get(team)
-        
-        # マッピングにない新規J3チーム等の場合はスキップ
         if not team_id:
             injury_summary[team] = "情報なし"
             continue
             
-        # API-Football公式の「injuries」取得用URL（チームIDとシーズンでピンポイント指定）
-        url = f"https://free-api-live-football-data.p.rapidapi.com/injuries?team={team_id}&season={current_season}"
+        # API-Footballの正規の負傷者エンドポイントURL
+        url = f"https://api-football-v1.p.rapidapi.com/v3/injuries?team={team_id}&season={current_season}"
         
         try:
             req = urllib.request.Request(url, headers=headers)
@@ -274,8 +271,8 @@ def fetch_team_injuries(api_key, target_teams):
                 else:
                     injury_summary[team] = "なし"
                 
-        except Exception:
-            injury_summary[team] = "データ取得エラー（スキップ）"
+        except Exception as e:
+            injury_summary[team] = f"データ取得エラー（原因: {e}）"
             
     print("--- [INFO] API-Football からのデータ同期が完了しました ---")
     return injury_summary
