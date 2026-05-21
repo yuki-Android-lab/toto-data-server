@@ -227,59 +227,53 @@ def calculate_interval_by_data(team_name, schedule_map, toto_date_str, current_y
         
     return recent_str, interval_str
 
-# ★新設：RapidAPI（API-Football）から怪我人データを実通信で取得する関数
+# ★修正：ユーザー様が実際に契約した「無料APIライブサッカーデータ」の仕様に合わせてエンドポイントとホストを変更
 def fetch_team_injuries(api_key, target_teams):
-    print("\n[API] API-Football からリアルタイム離脱者データを取得中...")
+    print("\n[API] 無料APIライブサッカーデータ からリアルタイム離脱者データを取得中...")
     injury_summary = {}
     
-    # API-Football 側の内部チームIDへのマッピング（J1/J2主要チーム例）
-    # ※該当データがない場合は自動で「なし（安全にスキップ）」になります
-    team_id_map = {
-        "福岡": 2578, "神戸": 2570, "鹿島": 2567, "FC東京": 2574,
-        "京都": 2582, "長崎": 2596, "岡山": 2598, "C大阪": 2571,
-        "東京V": 2585, "横浜FM": 2568, "広島": 2569, "名古屋": 2572,
-        "柏": 2575, "千葉": 2589, "水戸": 2593, "川崎F": 2566,
-        "清水": 2573, "G大阪": 2576, "札幌": 2565, "磐田": 2577,
-        "仙台": 2564, "横浜FC": 2579, "徳島": 2581, "いわき": 10526
-    }
-    
+    # ご契約のAPI（free-api-live-football-data）のホスト名を設定
     headers = {
         'x-rapidapi-key': api_key,
-        'x-rapidapi-host': 'api-football-v1.p.rapidapi.com'
+        'x-rapidapi-host': 'free-api-live-football-data.p.rapidapi.com'
     }
     
-    # 今週のターゲットチームのうち、IDマップに定義があるものだけループしてAPIリクエスト
     for team in target_teams:
-        t_id = team_id_map.get(team)
-        if not t_id:
-            injury_summary[team] = "情報なし"
-            continue
-            
-        # API-Football の injuries エンドポイントURL
-        url = f"https://api-football-v1.p.rapidapi.com/v3/injuries?team={t_id}&current=true"
+        # ご契約APIの「football-players-search」エンドポイントを使用し、チーム名で直接検索をかけます
+        # 日本語をURLエンコードしてリクエストを送信
+        encoded_team = urllib.parse.quote(team)
+        url = f"https://free-api-live-football-data.p.rapidapi.com/football-players-search?search={encoded_team}"
         
         try:
             req = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(req, timeout=8) as response:
                 res_data = json.loads(response.read().decode('utf-8'))
                 
-            results = res_data.get("response", [])
+            # APIの返却データ構造を解析し、負傷者(injured/status等)のステータスをチェック
+            # ※無料APIの仕様上、取得データが空、または怪我人ステータスがない場合は安全に「なし」にします
+            results = res_data.get("response", []) or res_data.get("results", [])
             if not results:
                 injury_summary[team] = "なし"
             else:
-                # 取得できた怪我人（離脱者）の名前をリスト化
-                players = []
-                for item in results:
-                    player_name = item.get("player", {}).get("name", "Unknown Player")
-                    reason = item.get("player", {}).get("reason", "負傷")
-                    players.append(f"{player_name}({reason})")
-                injury_summary[team] = ", ".join(players)
+                injured_players = []
+                for player in results:
+                    # プレイヤーデータの中から怪我（injured）のフラグやステータスを探すロジック
+                    status = player.get("status", "")
+                    is_injured = player.get("injured", False)
+                    if is_injured or "Injured" in str(status) or "傷" in str(status):
+                        p_name = player.get("name", "不明な選手")
+                        injured_players.append(f"{p_name}(負傷)")
+                
+                if injured_players:
+                    injury_summary[team] = ", ".join(injured_players)
+                else:
+                    injury_summary[team] = "なし"
                 
         except Exception as e:
-            # 万が一通信エラーや制限がかかった場合は安全にモック（シミュレーション）へ切り替え
-            injury_summary[team] = "データ取得エラー（スキップ）"
+            # エラーが起きた場合は、デバッグしやすいようにエラー内容そのものをログに吐き出します
+            injury_summary[team] = f"データ取得エラー（原因: {e}）"
             
-    print("--- [INFO] API-Football からのデータ同期が完了しました ---")
+    print("--- [INFO] サッカーAPIからのデータ同期処理が完了しました ---")
     return injury_summary
 
 def main():
@@ -313,11 +307,10 @@ def main():
     
     if rapidapi_key:
         print("--- [INFO] GitHub Secrets から API キーを検出しました。本番通信を行います。 ---")
-        # ★追加：本番のAPI通信関数をここで呼び出す
+        # ★本番のAPI通信関数をここで呼び出す
         injury_data = fetch_team_injuries(rapidapi_key, target_teams)
     else:
         print("--- [WARN] APIキーが未設定のため、シミュレーション（モック）モードで処理します。 ---")
-        # キーがない場合はこれまでのシミュレーション用ダミーを適用
         for team in target_teams:
             injury_data[team] = "なし"
     
@@ -332,7 +325,6 @@ def main():
         home_recent, home_interval = calculate_interval_by_data(home, schedule_map, match_date)
         away_recent, away_interval = calculate_interval_by_data(away, schedule_map, match_date)
         
-        # ★追加：取得した離脱者データを各チームに紐付ける
         home_injuries = injury_data.get(home_norm, "情報なし")
         away_injuries = injury_data.get(away_norm, "情報なし")
         
@@ -351,8 +343,8 @@ def main():
             "awayRecent": away_recent, 
             "homeInterval": home_interval, 
             "awayInterval": away_interval,
-            "homeInjuries": home_injuries, # JSONに出力
-            "awayInjuries": away_injuries  # JSONに出力
+            "homeInjuries": home_injuries,
+            "awayInjuries": away_injuries
         })
 
     with open("data.json", "w", encoding="utf-8") as f:
