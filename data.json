@@ -10,8 +10,8 @@
         "awayRecent": "普通",
         "homeInterval": "中12日",
         "awayInterval": "中5日",
-        "homeInjuries": "なし",
-        "awayInjuries": "なし"
+        "homeInjuries": "データ取得エラー（スキップ）",
+        "awayInjuries": "データ取得エラー（スキップ）"
     },
     {
         "holdId": 1631,
@@ -24,8 +24,8 @@
         "awayRecent": "普通",
         "homeInterval": "中5日",
         "awayInterval": "中5日",
-        "homeInjuries": "なし",
-        "awayInjuries": "なし"
+        "homeInjuries": "データ取得エラー（スキップ）",
+        "awayInjuries": "データ取得エラー（スキップ）"
     },
     {
         "holdId": 1631,
@@ -38,8 +38,8 @@
         "awayRecent": "普通",
         "homeInterval": "中5日",
         "awayInterval": "中5日",
-        "homeInjuries": "なし",
-        "awayInjuries": "なし"
+        "homeInjuries": "データ取得エラー（スキップ）",
+        "awayInjuries": "データ取得エラー（スキップ）"
     },
     {
         "holdId": 1631,
@@ -51,9 +51,9 @@
         "homeRecent": "普通",
         "awayRecent": "普通",
         "homeInterval": "中6日",
-        "awayInterval": "中6日",
-        "homeInjuries": "なし",
-        "awayInjuries": "なし"
+        "awayInterval": "中5日",
+        "homeInjuries": "データ取得エラー（スキップ）",
+        "awayInjuries": "データ取得エラー（スキップ）"
     },
     {
         "holdId": 1631,
@@ -66,8 +66,8 @@
         "awayRecent": "普通",
         "homeInterval": "中6日",
         "awayInterval": "中6日",
-        "homeInjuries": "なし",
-        "awayInjuries": "なし"
+        "homeInjuries": "データ取得エラー（スキップ）",
+        "awayInjuries": "データ取得エラー（スキップ）"
     },
     {
         "holdId": 1631,
@@ -80,8 +80,8 @@
         "awayRecent": "普通",
         "homeInterval": "中5日",
         "awayInterval": "中5日",
-        "homeInjuries": "なし",
-        "awayInjuries": "なし"
+        "homeInjuries": "データ取得エラー（スキップ）",
+        "awayInjuries": "データ取得エラー（スキップ）"
     },
     {
         "holdId": 1631,
@@ -94,8 +94,8 @@
         "awayRecent": "普通",
         "homeInterval": "中5日",
         "awayInterval": "中5日",
-        "homeInjuries": "なし",
-        "awayInjuries": "なし"
+        "homeInjuries": "データ取得エラー（スキップ）",
+        "awayInjuries": "データ取得エラー（スキップ）"
     },
     {
         "holdId": 1631,
@@ -108,8 +108,8 @@
         "awayRecent": "普通",
         "homeInterval": "中5日",
         "awayInterval": "中5日",
-        "homeInjuries": "なし",
-        "awayInjuries": "なし"
+        "homeInjuries": "データ取得エラー（スキップ）",
+        "awayInjuries": "データ取得エラー（スキップ）"
     },
     {
         "holdId": 1631,
@@ -122,8 +122,8 @@
         "awayRecent": "普通",
         "homeInterval": "中6日",
         "awayInterval": "中6日",
-        "homeInjuries": "なし",
-        "awayInjuries": "なし"
+        "homeInjuries": "データ取得エラー（スキップ）",
+        "awayInjuries": "データ取得エラー（スキップ）"
     },
     {
         "holdId": 1631,
@@ -136,8 +136,8 @@
         "awayRecent": "普通",
         "homeInterval": "中5日",
         "awayInterval": "中5日",
-        "homeInjuries": "なし",
-        "awayInjuries": "なし"
+        "homeInjuries": "データ取得エラー（スキップ）",
+        "awayInjuries": "データ取得エラー（スキップ）"
     },
     {
         "holdId": 1631,
@@ -150,8 +150,8 @@
         "awayRecent": "普通",
         "homeInterval": "中5日",
         "awayInterval": "中5日",
-        "homeInjuries": "なし",
-        "awayInjuries": "なし"
+        "homeInjuries": "データ取得エラー（スキップ）",
+        "awayInjuries": "データ取得エラー（スキップ）"
     },
     {
         "holdId": 1631,
@@ -164,8 +164,8 @@
         "awayRecent": "普通",
         "homeInterval": "中5日",
         "awayInterval": "中5日",
-        "homeInjuries": "なし",
-        "awayInjuries": "なし"
+        "homeInjuries": "データ取得エラー（スキップ）",
+        "awayInjuries": "データ取得エラー（スキップ）"
     },
     {
         "holdId": 1631,
@@ -178,7 +178,7 @@
         "awayRecent": "普通",
         "homeInterval": "中5日",
         "awayInterval": "中5日",
-        "homeInjuries": "なし",
-        "awayInjuries": "なし"
+        "homeInjuries": "データ取得エラー（スキップ）",
+        "awayInjuries": "データ取得エラー（スキップ）"
     }
 ]
