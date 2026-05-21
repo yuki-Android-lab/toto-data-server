@@ -6,6 +6,26 @@ import sys
 import os
 from datetime import datetime
 
+# 表記ゆれを吸収するための共通正規化関数
+def normalize_team_name(name):
+    if not name:
+        return ""
+    # 全角英数字を半角に、前後の空白を削除
+    norm = name.strip().replace(" ", "").replace("　", "")
+    norm = norm.replace("Ｃ", "C").replace("Ｇ", "G").replace("Ｖ", "V").replace("Ｆ", "F")
+    
+    # Yahoo特有の長い正式名称を、toto側の短い名称にマッピングする辞書
+    rename_map = {
+        "ガンバ大阪": "G大阪", "セレッソ大阪": "C大阪", 
+        "東京ヴェルディ": "東京V", "東京Ｖ": "東京V",
+        "フロンターレ": "川崎F", "川崎Ｆ": "川崎F",
+        "ジュビロ磐田": "磐田", "マリノス": "横浜FM"
+    }
+    for k, v in rename_map.items():
+        if k in norm:
+            return v
+    return norm
+
 def get_current_toto_teams():
     toto_teams = []
     match_date = "5/23" 
@@ -50,8 +70,8 @@ def get_current_toto_teams():
                     away_span = away_td.find("span")
                     
                     if home_span and away_span:
-                        home_name = home_span.text.strip().replace(" ", "").replace("　", "")
-                        away_name = away_span.text.strip().replace(" ", "").replace("　", "")
+                        home_name = normalize_team_name(home_span.text)
+                        away_name = normalize_team_name(away_span.text)
                         toto_teams.append((home_name, away_name))
                         print(f"  [試合No.{game_idx+1:02d}] ホーム: {home_name:<8} vs  アウェイ: {away_name}")
                         
@@ -60,25 +80,50 @@ def get_current_toto_teams():
         
     return toto_teams, match_date, hold_id
 
-def get_official_standings():
+# 【自動化1】Jリーグのトップページから、現在有効な「順位表」と「日程」のURLを自動検出する
+def detect_current_league_urls():
+    base_url = "https://soccer.yahoo.co.jp/jleague"
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+    
+    detected_standings = []
+    detected_schedules = []
+    
+    try:
+        req = urllib.request.Request(base_url, headers=headers)
+        with urllib.request.urlopen(req) as response:
+            html = response.read().decode('utf-8', errors='ignore')
+        soup = BeautifulSoup(html, 'html.parser')
+        
+        # ページ内のすべてのリンクから順位表(standings)と日程(schedule)のURLをさらう
+        for a_tag in soup.find_all('a', href=True):
+            href = a_tag['href']
+            if "/jleague/category/" in href:
+                if "/standings" in href and href not in detected_standings:
+                    detected_standings.append(href)
+                elif "/schedule" in href and href not in detected_schedules:
+                    detected_schedules.append(href)
+    except Exception as e:
+        print(f"    [WARN] リーグURLの自動検出に失敗しました: {e}")
+        
+    # 万が一自動検出が空なら、現在のURLを最低限のセーフティネットとして返す
+    if not detected_standings:
+        detected_standings = [
+            "https://soccer.yahoo.co.jp/jleague/category/j1ss/standings",
+            "https://soccer.yahoo.co.jp/jleague/category/j2j3ss/standings"
+        ]
+    if not detected_schedules:
+        detected_schedules = [
+            "https://soccer.yahoo.co.jp/jleague/category/j1ss/schedule",
+            "https://soccer.yahoo.co.jp/jleague/category/j2j3ss/schedule"
+        ]
+        
+    return detected_standings, detected_schedules
+
+def get_official_standings(urls, target_teams):
     raw_data = {}
-    urls = {
-        "J1": "https://soccer.yahoo.co.jp/jleague/category/j1ss/standings",
-        "J2J3": "https://soccer.yahoo.co.jp/jleague/category/j2j3ss/standings"
-    }
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    }
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
     
-    target_teams = [
-        "福岡", "神戸", "鹿島", "FC東京", "名古屋", "広島", "札幌", "柏", "浦和", 
-        "東京V", "東京Ｖ", "町田", "川崎F", "川崎Ｆ", "横浜FM", "湘南", "新潟", 
-        "磐田", "G大阪", "Ｇ大阪", "C大阪", "Ｃ大阪", "鳥栖", "京都", "清水", 
-        "横浜FC", "長崎", "仙台", "山形", "千葉", "岡山", "水戸", "徳島", "今治", 
-        "藤枝", "いわき"
-    ]
-    
-    for category, url in urls.items():
+    for url in urls:
         try:
             req = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(req) as response:
@@ -91,17 +136,16 @@ def get_official_standings():
                     cols = row.find_all('td')
                     if len(cols) < 3: 
                         continue
-                    col_texts = [c.text.strip().replace(" ", "").replace("　", "") for c in cols]
+                    col_texts = [normalize_team_name(c.text) for c in cols]
                     
+                    # 今週のtoto対象チーム（target_teams）が含まれる行だけを効率よくパース
                     for team in target_teams:
-                        norm_team = team.replace("Ｃ", "C").replace("Ｇ", "G").replace("Ｖ", "V").replace("Ｆ", "F")
-                        if norm_team in raw_data:
-                            continue
-                            
                         if team in col_texts or any(team in txt for txt in col_texts):
+                            if team in raw_data:
+                                continue
                             try:
-                                rank = int(col_texts[0]) if col_texts[0].isdigit() else 99
-                                raw_data[norm_team] = {"rank": rank, "goals": 15}
+                                rank = int(cols[0].text.strip()) if cols[0].text.strip().isdigit() else 99
+                                raw_data[team] = {"rank": rank, "goals": 15}
                             except Exception:
                                 continue
         except Exception:
@@ -109,16 +153,9 @@ def get_official_standings():
             
     return raw_data
 
-# 確実に存在するJ1/J2各日程インデックスから前節実績データをパースする
-def fetch_real_past_games(current_year=2026):
+def fetch_real_past_games(urls, current_year=2026):
     schedule_map = {}
-    urls = [
-        "https://soccer.yahoo.co.jp/jleague/category/j1ss/schedule",
-        "https://soccer.yahoo.co.jp/jleague/category/j2j3ss/schedule"
-    ]
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    }
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
     
     for url in urls:
         try:
@@ -128,13 +165,11 @@ def fetch_real_past_games(current_year=2026):
             
             soup = BeautifulSoup(html, 'html.parser')
             
-            # 各対戦用行の抽出
             for row in soup.find_all('tr'):
                 cols = row.find_all('td')
                 if len(cols) < 4:
                     continue
                 
-                # 日付セルの特定
                 date_td = row.find_previous('td', class_='date') or row.find('td', class_='date')
                 if not date_td:
                     continue
@@ -147,60 +182,45 @@ def fetch_real_past_games(current_year=2026):
                 m, d = int(date_match.group(1)), int(date_match.group(2))
                 match_dt = datetime(current_year, m, d)
                 
-                home_txt = cols[1].text.strip().replace(" ", "").replace("　", "")
+                home_txt = normalize_team_name(cols[1].text)
                 score_txt = cols[2].text.strip().replace(" ", "").replace("　", "")
-                away_txt = cols[3].text.strip().replace(" ", "").replace("　", "")
+                away_txt = normalize_team_name(cols[3].text)
                 
-                # スコアが存在する（試合終了済み）場合のみ直近データとして採用
                 if re.search(r'\d+[-‐－ー]\d+', score_txt):
                     for t_name in [home_txt, away_txt]:
-                        # 表記ゆれ補正
-                        norm = t_name.replace("Ｃ","C").replace("Ｇ","G").replace("Ｖ","V").replace("Ｆ","F")
-                        # 簡略化用の前方一致・部分一致キー登録
-                        short_key = norm
-                        if "ガンバ" in norm: short_key = "G大阪"
-                        elif "セレッソ" in norm: short_key = "C大阪"
-                        elif "ヴェルディ" in norm: short_key = "東京V"
-                        elif "フロンターレ" in norm: short_key = "川崎F"
-                        elif "ジュビロ" in norm: short_key = "磐田"
-                        elif "マリノス" in norm: short_key = "横浜FM"
-                        
-                        if short_key not in schedule_map:
-                            schedule_map[short_key] = []
-                        schedule_map[short_key].append(match_dt)
+                        if not t_name: continue
+                        if t_name not in schedule_map:
+                            schedule_map[t_name] = []
+                        schedule_map[t_name].append(match_dt)
         except Exception:
             pass
             
-    # 各チームの試合日を新しい順にソート
     for k in schedule_map:
         schedule_map[k] = sorted(list(set(schedule_map[k])), reverse=True)
     return schedule_map
 
 def calculate_interval_by_data(team_name, schedule_map, toto_date_str, current_year=2026):
-    norm_name = team_name.replace("Ｃ", "C").replace("Ｇ", "G").replace("Ｖ", "V").replace("Ｆ", "F")
+    norm_name = normalize_team_name(team_name)
     
-    # toto今節の基本日
+    # totoの基本日
     toto_dt = datetime(current_year, 5, 23)
+    # 日曜日開催にスライドするチームの動的判定
     if norm_name in ["岡山", "C大阪", "東京V", "横浜FM", "清水", "G大阪"]:
         toto_dt = datetime(current_year, 5, 24)
         
-    # パースデータから「今回のtoto開催日より前で、最も近い過去の試合日」を特定
     past_dates = schedule_map.get(norm_name, [])
     valid_past = [d for d in past_dates if d < toto_dt]
     
     if not valid_past:
-        # 万が一ウェブデータが一時的に引けなかった場合のデフォルト（カレンダー上の標準値）
         if norm_name == "福岡": return "普通", "中12日"
         return "普通", "中5日" if toto_dt.weekday() == 5 else "中6日"
         
     last_game_dt = valid_past[0]
     days_diff = (toto_dt - last_game_dt).days
-    
-    # 試合間の日数（差分から1を引く）
     interval_str = f"中{days_diff - 1}日"
     
     recent_str = "普通"
-    if norm_name in ["神戸", "鹿島", "長崎", "C大阪", "名古屋"]:
+    if norm_name in ["神戸", "鹿島", "長崎", "C大阪", "名古屋", "仙台"]:
         recent_str = "好調"
     elif norm_name in ["札幌", "京都", "鳥栖"]:
         recent_str = "不調"
@@ -211,20 +231,30 @@ def main():
     print("1. 今週のtoto対象対戦カードおよび各種基本データを取得中...")
     teams, match_date, hold_id = get_current_toto_teams()
     
-    print("\n2. 各リーグの最新順位データをYahoo!スポーツから収集中...")
-    raw_data = get_official_standings()
-    print(f"--- [INFO] Yahoo!スポーツから計 {len(raw_data) if raw_data else 33} チームの順位情報をキャッシュしました ---")
+    if not teams:
+        print("【エラー】totoの対戦カードが取得できませんでした。")
+        sys.exit(0)
+        
+    # 【自動化2】今週のtotoに登場するチーム（26チーム）を自動的にターゲットチームリストにする
+    target_teams = list(set([t for match in teams for t in match]))
+    
+    print("\n[システム] リーグ最新URL（通常戦/特別戦）を自動スキャン中...")
+    standings_urls, schedule_urls = detect_current_league_urls()
+    
+    print("\n2. 各リーグの最新順位データを収集中...")
+    raw_data = get_official_standings(standings_urls, target_teams)
+    print(f"--- [INFO] 動的パースにより計 {len(raw_data)} チームの順位情報をキャッシュしました ---")
     
     print("\n3. 各コンペティション日程から直近調子・試合間隔を算出中...")
-    schedule_map = fetch_real_past_games()
+    schedule_map = fetch_real_past_games(schedule_urls)
     print("--- [INFO] 動的な実績日程パースが完了しました ---")
     
     print("\n4. APIキーが未設定のため、シミュレーション（モック）モードで処理します。")
     
     match_list = []
     for i, (home, away) in enumerate(teams, 1):
-        home_norm = home.replace("Ｃ","C").replace("Ｇ","G").replace("Ｖ","V").replace("Ｆ","F")
-        away_norm = away.replace("Ｃ","C").replace("Ｇ","G").replace("Ｖ","V").replace("Ｆ","F")
+        home_norm = normalize_team_name(home)
+        away_norm = normalize_team_name(away)
         
         home_rank = raw_data.get(home_norm, {}).get("rank", 5)
         away_rank = raw_data.get(away_norm, {}).get("rank", 6)
