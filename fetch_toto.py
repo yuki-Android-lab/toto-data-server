@@ -231,7 +231,7 @@ def calculate_interval_by_data(team_name, schedule_map, toto_date_str, current_y
     return recent_str, interval_str
 
 def fetch_team_injuries(api_key, target_teams):
-    print("\n[国内スクレイピング] Yahoo!スポーツ(100周年記念SS版)から主要選手データを取得中...")
+    print("\n[国内スクレイピング] Yahoo!スポーツ(100周年記念SS版)から主要選手データを正確にパース中...")
     injury_summary = {}
     
     headers = {
@@ -248,95 +248,69 @@ def fetch_team_injuries(api_key, target_teams):
             player_db[name] = {"team": norm_t, "goals": 0, "assists": 0, "minutes": 0, "games": 0, "cards": 0}
         return player_db[name]
 
-    # --- 1. 得点ランキング (type=1) ---
-    goal_urls = [
+    # 汎用パース関数：URLとスタッツのキー、そして数値が何列目にあるかを指定
+    def parse_yahoo_stats(urls, key_name, val_col_idx):
+        for url in urls:
+            try:
+                req = urllib.request.Request(url, headers=headers)
+                with urllib.request.urlopen(req, timeout=8) as response:
+                    soup = BeautifulSoup(response.read().decode('utf-8', errors='ignore'), 'html.parser')
+                    table = soup.find('table')
+                    if not table:
+                        continue
+                    
+                    for row in table.find_all('tr')[1:]: # ヘッダー除外
+                        cols = row.find_all(['td', 'th'])
+                        if len(cols) < 4:
+                            continue
+                        
+                        # Yahooの標準構造：1列目=順位, 2列目=選手名, 3列目=チーム名
+                        p_name = cols[1].text.strip().replace(" ", "").replace("　", "")
+                        t_name = cols[2].text.strip()
+                        
+                        # 特有の表記ゆれや「チーム名の中に余計な文字が入る」のを防ぐため、簡易クリーニング
+                        t_name = t_name.split("\n")[0].strip()
+                        
+                        val_text = cols[val_col_idx].text.strip().replace(",", "")
+                        val = int(val_text) if val_text.isdigit() else 0
+                        
+                        if p_name and t_name:
+                            # 警告などの場合、すでに得点/アシストで登録されている選手のみ紐付ける
+                            if key_name in ["minutes", "games", "cards"]:
+                                if p_name in player_db:
+                                    player_db[p_name][key_name] = val
+                            else:
+                                p = get_or_create_player(p_name, t_name)
+                                p[key_name] = val
+            except Exception as e:
+                print(f"[DEBUG] パース失敗 ({key_name}): {e}")
+
+    # --- 各URLからデータを収集 (列インデックスは通常4列目[3]に数値が来ます) ---
+    # 1. 得点
+    parse_yahoo_stats([
         "https://soccer.yahoo.co.jp/jleague/category/j1ss/stats?gk=249&type=1",
         "https://soccer.yahoo.co.jp/jleague/category/j2j3ss/stats?gk=250&type=1"
-    ]
-    for url in goal_urls:
-        try:
-            req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=8) as response:
-                soup = BeautifulSoup(response.read().decode('utf-8', errors='ignore'), 'html.parser')
-                table = soup.find('table')
-                if table:
-                    for row in table.find_all('tr')[1:]:
-                        cols = row.find_all('td')
-                        if len(cols) >= 4:
-                            p_name = cols[1].text.strip()
-                            t_name = cols[2].text.strip()
-                            goals = int(cols[3].text.strip()) if cols[3].text.strip().isdigit() else 0
-                            p = get_or_create_player(p_name, t_name)
-                            p["goals"] = goals
-        except Exception: pass
+    ], "goals", 3)
 
-    # --- 2. アシストランキング (type=6) ---
-    assist_urls = [
+    # 2. アシスト
+    parse_yahoo_stats([
         "https://soccer.yahoo.co.jp/jleague/category/j1ss/stats?gk=249&type=6",
         "https://soccer.yahoo.co.jp/jleague/category/j2j3ss/stats?gk=250&type=6"
-    ]
-    for url in assist_urls:
-        try:
-            req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=8) as response:
-                soup = BeautifulSoup(response.read().decode('utf-8', errors='ignore'), 'html.parser')
-                table = soup.find('table')
-                if table:
-                    for row in table.find_all('tr')[1:]:
-                        cols = row.find_all('td')
-                        if len(cols) >= 4:
-                            p_name = cols[1].text.strip()
-                            t_name = cols[2].text.strip()
-                            assists = int(cols[3].text.strip()) if cols[3].text.strip().isdigit() else 0
-                            p = get_or_create_player(p_name, t_name)
-                            p["assists"] = assists
-        except Exception: pass
+    ], "assists", 3)
 
-    # --- 3. 出場時間 (type=4) ---
-    min_urls = [
-        "https://soccer.yahoo.co.jp/jleague/category/j1ss/stats?gk=249&type=4",
-        "https://soccer.yahoo.co.jp/jleague/category/j2j3ss/stats?gk=250&type=4"
-    ]
-    for url in min_urls:
-        try:
-            req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=8) as response:
-                soup = BeautifulSoup(response.read().decode('utf-8', errors='ignore'), 'html.parser')
-                table = soup.find('table')
-                if table:
-                    for row in table.find_all('tr')[1:]:
-                        cols = row.find_all('td')
-                        if len(cols) >= 4:
-                            p_name = cols[1].text.strip()
-                            t_name = cols[2].text.strip()
-                            minutes = int(cols[3].text.strip().replace(",", "")) if cols[3].text.strip().replace(",", "").isdigit() else 0
-                            if p_name in player_db: # 得点/アシスト者に限定して紐付け
-                                player_db[p_name]["minutes"] = minutes
-        except Exception: pass
-
-    # --- 4. 出場試合数 (type=3) ---
-    game_urls = [
+    # 3. 出場試合数
+    parse_yahoo_stats([
         "https://soccer.yahoo.co.jp/jleague/category/j1ss/stats?gk=249&type=3",
         "https://soccer.yahoo.co.jp/jleague/category/j2j3ss/stats?gk=250&type=3"
-    ]
-    for url in game_urls:
-        try:
-            req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=8) as response:
-                soup = BeautifulSoup(response.read().decode('utf-8', errors='ignore'), 'html.parser')
-                table = soup.find('table')
-                if table:
-                    for row in table.find_all('tr')[1:]:
-                        cols = row.find_all('td')
-                        if len(cols) >= 4:
-                            p_name = cols[1].text.strip()
-                            t_name = cols[2].text.strip()
-                            games = int(cols[3].text.strip()) if cols[3].text.strip().isdigit() else 0
-                            if p_name in player_db: # 得点/アシスト者に限定して紐付け
-                                player_db[p_name]["games"] = games
-        except Exception: pass
+    ], "games", 3)
 
-    # --- 5. 警告・退場（typeなしのデフォルト画面からパース） ---
+    # 4. 出場時間
+    parse_yahoo_stats([
+        "https://soccer.yahoo.co.jp/jleague/category/j1ss/stats?gk=249&type=4",
+        "https://soccer.yahoo.co.jp/jleague/category/j2j3ss/stats?gk=250&type=4"
+    ], "minutes", 3)
+
+    # 5. 警告・退場 (typeなしのデフォルト画面から「警告数」をパース)
     card_urls = [
         "https://soccer.yahoo.co.jp/jleague/category/j1ss/stats",
         "https://soccer.yahoo.co.jp/jleague/category/j2j3ss/stats"
@@ -346,16 +320,15 @@ def fetch_team_injuries(api_key, target_teams):
             req = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(req, timeout=8) as response:
                 soup = BeautifulSoup(response.read().decode('utf-8', errors='ignore'), 'html.parser')
-                # 警告ランキングのテーブルを特定（Yahooは通常、複数のテーブルがあるのでtrのヘッダー文字等で判定）
                 for table in soup.find_all('table'):
                     rows = table.find_all('tr')
                     if len(rows) > 1 and "警告" in rows[0].text:
                         for row in rows[1:]:
-                            cols = row.find_all('td')
+                            cols = row.find_all(['td', 'th'])
                             if len(cols) >= 4:
-                                p_name = cols[1].text.strip()
-                                t_name = cols[2].text.strip()
-                                cards = int(cols[3].text.strip()) if cols[3].text.strip().isdigit() else 0
+                                p_name = cols[1].text.strip().replace(" ", "").replace("　", "")
+                                cards_text = cols[3].text.strip()
+                                cards = int(cards_text) if cards_text.isdigit() else 0
                                 if p_name in player_db:
                                     player_db[p_name]["cards"] = cards
         except Exception: pass
@@ -372,17 +345,19 @@ def fetch_team_injuries(api_key, target_teams):
                 if data["games"] > 0:
                     avg_min = round(data["minutes"] / data["games"], 1)
                 
-                # 情報テキストの組み立て
-                p_info = f"{p_name}(得点:{data['goals']}/頁:{avg_min}分)"
+                # 通常表示のテキスト
+                p_info = f"{p_name}(得点:{data['goals']}/平均:{avg_min}分)"
+                if data["assists"] > 0:
+                    p_info = f"{p_name}(得点:{data['goals']}/アシスト:{data['assists']}/平均:{avg_min}分)"
                 
-                # 警告が溜まっている場合の情報追加
+                # 警告累積の警告マーク
                 if data["cards"] >= 3:
-                    p_info += f"⚠️警告累積:{data['cards']}枚"
+                    p_info += f"⚠️警告:{data['cards']}枚"
                     
-                # 【離脱・異常値検知】
-                # ランキングに載るようなエースなのに、1試合平均の出場時間が極端に短い（例:30分未満）＝ケガ明け調整中か離脱・スタメン落ちの懸念
-                if data["games"] > 2 and avg_min < 30.0:
-                    p_info = f"【要警戒】{p_name}(直近稼働率低下:平均{avg_min}分)"
+                # 【要警戒の判定ルール】
+                # 出場試合数が3試合以上あるのに、1試合の平均出場時間が45分未満＝直近でスタメン落ち、またはケガ明けの限定稼働とみなす
+                if data["games"] >= 3 and avg_min < 45.0:
+                    p_info = f"【要警戒】{p_name}(平均稼働:{avg_min}分)"
                 
                 star_player_status.append(p_info)
 
@@ -390,7 +365,7 @@ def fetch_team_injuries(api_key, target_teams):
         if star_player_status:
             injury_summary[norm_team] = " / ".join(star_player_status)
         else:
-            injury_summary[norm_team] = "主要エースの稼働問題なし（またはランク外）"
+            injury_summary[norm_team] = "主要エースの稼働問題なし（またはデータなし）"
 
     print("--- [INFO] Yahoo!スポーツからのデータ同期が完了しました ---")
     return injury_summary
