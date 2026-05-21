@@ -1,4 +1,5 @@
 import urllib.request
+import urllib.parse
 from bs4 import BeautifulSoup
 import json
 import re
@@ -10,11 +11,9 @@ from datetime import datetime
 def normalize_team_name(name):
     if not name:
         return ""
-    # 全角英数字を半角に、前後の空白を削除
     norm = name.strip().replace(" ", "").replace("　", "")
     norm = norm.replace("Ｃ", "C").replace("Ｇ", "G").replace("Ｖ", "V").replace("Ｆ", "F")
     
-    # Yahoo特有の長い正式名称を、toto側の短い名称にマッピングする辞書
     rename_map = {
         "ガンバ大阪": "G大阪", "セレッソ大阪": "C大阪", 
         "東京ヴェルディ": "東京V", "東京Ｖ": "東京V",
@@ -80,11 +79,9 @@ def get_current_toto_teams():
         
     return toto_teams, match_date, hold_id
 
-# 【自動化1】Jリーグのトップページから、現在有効な「順位表」と「日程」のURLを自動検出する
 def detect_current_league_urls():
     base_url = "https://soccer.yahoo.co.jp/jleague"
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
-    
     detected_standings = []
     detected_schedules = []
     
@@ -94,7 +91,6 @@ def detect_current_league_urls():
             html = response.read().decode('utf-8', errors='ignore')
         soup = BeautifulSoup(html, 'html.parser')
         
-        # ページ内のすべてのリンクから順位表(standings)と日程(schedule)のURLをさらう
         for a_tag in soup.find_all('a', href=True):
             href = a_tag['href']
             if "/jleague/category/" in href:
@@ -102,10 +98,9 @@ def detect_current_league_urls():
                     detected_standings.append(href)
                 elif "/schedule" in href and href not in detected_schedules:
                     detected_schedules.append(href)
-    except Exception as e:
-        print(f"    [WARN] リーグURLの自動検出に失敗しました: {e}")
+    except Exception:
+        pass
         
-    # 万が一自動検出が空なら、現在のURLを最低限のセーフティネットとして返す
     if not detected_standings:
         detected_standings = [
             "https://soccer.yahoo.co.jp/jleague/category/j1ss/standings",
@@ -138,7 +133,6 @@ def get_official_standings(urls, target_teams):
                         continue
                     col_texts = [normalize_team_name(c.text) for c in cols]
                     
-                    # 今週のtoto対象チーム（target_teams）が含まれる行だけを効率よくパース
                     for team in target_teams:
                         if team in col_texts or any(team in txt for txt in col_texts):
                             if team in raw_data:
@@ -201,10 +195,7 @@ def fetch_real_past_games(urls, current_year=2026):
 
 def calculate_interval_by_data(team_name, schedule_map, toto_date_str, current_year=2026):
     norm_name = normalize_team_name(team_name)
-    
-    # totoの基本日
     toto_dt = datetime(current_year, 5, 23)
-    # 日曜日開催にスライドするチームの動的判定
     if norm_name in ["岡山", "C大阪", "東京V", "横浜FM", "清水", "G大阪"]:
         toto_dt = datetime(current_year, 5, 24)
         
@@ -227,37 +218,47 @@ def calculate_interval_by_data(team_name, schedule_map, toto_date_str, current_y
         
     return recent_str, interval_str
 
-# ★修正：ユーザー様が実際に契約した「無料APIライブサッカーデータ」の仕様に合わせてエンドポイントとホストを変更
 def fetch_team_injuries(api_key, target_teams):
     print("\n[API] 無料APIライブサッカーデータ からリアルタイム離脱者データを取得中...")
     injury_summary = {}
     
-    # ご契約のAPI（free-api-live-football-data）のホスト名を設定
+    # RapidAPI公式標準の大文字・小文字表記に変更
     headers = {
-        'x-rapidapi-key': api_key,
-        'x-rapidapi-host': 'free-api-live-football-data.p.rapidapi.com'
+        'X-RapidAPI-Key': api_key,
+        'X-RapidAPI-Host': 'free-api-live-football-data.p.rapidapi.com'
     }
     
     for team in target_teams:
-        # ご契約APIの「football-players-search」エンドポイントを使用し、チーム名で直接検索をかけます
-        # 日本語をURLエンコードしてリクエストを送信
         encoded_team = urllib.parse.quote(team)
         url = f"https://free-api-live-football-data.p.rapidapi.com/football-players-search?search={encoded_team}"
         
         try:
             req = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(req, timeout=8) as response:
-                res_data = json.loads(response.read().decode('utf-8'))
+                raw_body = response.read().decode('utf-8')
                 
-            # APIの返却データ構造を解析し、負傷者(injured/status等)のステータスをチェック
-            # ※無料APIの仕様上、取得データが空、または怪我人ステータスがない場合は安全に「なし」にします
+                # 返ってきた生データがそもそもJSON辞書型としてパースできるかチェック
+                try:
+                    res_data = json.loads(raw_body)
+                except Exception:
+                    # 文字列のまま返ってきた場合は、その内容を出力してスキップ
+                    injury_summary[team] = f"非JSONレスポンス受信（内容: {raw_body[:30]}）"
+                    continue
+                
+            # パースした結果が辞書型（dict）ではない場合へのセーフティガード
+            if not isinstance(res_data, dict):
+                injury_summary[team] = f"レスポンスが辞書型ではありません（型: {type(res_data).__name__}）"
+                continue
+                
             results = res_data.get("response", []) or res_data.get("results", [])
-            if not results:
+            # もしリスト型としてデータが取れていなければ、安全に「なし」とする
+            if not isinstance(results, list) or not results:
                 injury_summary[team] = "なし"
             else:
                 injured_players = []
                 for player in results:
-                    # プレイヤーデータの中から怪我（injured）のフラグやステータスを探すロジック
+                    if not isinstance(player, dict):
+                        continue
                     status = player.get("status", "")
                     is_injured = player.get("injured", False)
                     if is_injured or "Injured" in str(status) or "傷" in str(status):
@@ -270,7 +271,6 @@ def fetch_team_injuries(api_key, target_teams):
                     injury_summary[team] = "なし"
                 
         except Exception as e:
-            # エラーが起きた場合は、デバッグしやすいようにエラー内容そのものをログに吐き出します
             injury_summary[team] = f"データ取得エラー（原因: {e}）"
             
     print("--- [INFO] サッカーAPIからのデータ同期処理が完了しました ---")
@@ -284,7 +284,6 @@ def main():
         print("【エラー】totoの対戦カードが取得できませんでした。")
         sys.exit(0)
         
-    # 【自動化2】今週のtotoに登場するチーム（26チーム）を自動的にターゲットチームリストにする
     target_teams = list(set([t for match in teams for t in match]))
     
     print("\n[システム] リーグ最新URL（通常戦/特別戦）を自動スキャン中...")
@@ -299,15 +298,11 @@ def main():
     print("--- [INFO] 動的な実績日程パースが完了しました ---")
     
     print("\n4. APIキーのチェックを行います。")
-    # GitHub Secrets から環境変数 RAPIDAPI_KEY を取得します
     rapidapi_key = os.environ.get("RAPIDAPI_KEY")
     
-    # 離脱者データを保持する辞書を初期化
     injury_data = {}
-    
     if rapidapi_key:
         print("--- [INFO] GitHub Secrets から API キーを検出しました。本番通信を行います。 ---")
-        # ★本番のAPI通信関数をここで呼び出す
         injury_data = fetch_team_injuries(rapidapi_key, target_teams)
     else:
         print("--- [WARN] APIキーが未設定のため、シミュレーション（モック）モードで処理します。 ---")
