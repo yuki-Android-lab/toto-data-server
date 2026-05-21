@@ -258,6 +258,12 @@ def fetch_team_injuries(api_key, target_teams):
 
     # 各チームの判定処理ループ
     for idx, team in enumerate(target_teams):
+        # ------------------------------------------------------------
+        # 【将来用メモ】今後ループ内でAPIを叩く場合は、以下の3行のコメントアウトを外す
+        # if idx > 0:
+        #     print(f"API負荷軽減のため、10秒間スリープします... (進捗: {idx}/{len(target_teams)})")
+        #     time.sleep(10)
+        # ------------------------------------------------------------
         team_id = J_TEAM_IDS.get(team)
         if not team_id:
             injury_summary[team] = "情報なし"
