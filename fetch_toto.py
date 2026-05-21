@@ -231,64 +231,166 @@ def calculate_interval_by_data(team_name, schedule_map, toto_date_str, current_y
     return recent_str, interval_str
 
 def fetch_team_injuries(api_key, target_teams):
-    print("\n[国内スクレイピング] Yahoo!スポーツから得点ランキング（主力選手）データを取得中...")
+    print("\n[国内スクレイピング] Yahoo!スポーツ(100周年記念SS版)から主要選手データを取得中...")
     injury_summary = {}
-    
-    # Yahoo!スポーツのJ1・J2得点ランキングURL
-    ranking_urls = [
-        "https://soccer.yahoo.co.jp/jleague/category/j1/ranking/goals",
-        "https://soccer.yahoo.co.jp/jleague/category/j2/ranking/goals"
-    ]
     
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
     
-    top_players = [] # (選手名, チーム名) のリストを入れる
-    
-    # 1. ランキングページから上位選手をスキャン
-    for url in ranking_urls:
+    # 蓄積用データ構造
+    # { "選手名": { "team": "福岡", "goals": 0, "assists": 0, "minutes": 0, "games": 0, "cards": 0 } }
+    player_db = {}
+
+    def get_or_create_player(name, team_name):
+        norm_t = normalize_team_name(team_name)
+        if name not in player_db:
+            player_db[name] = {"team": norm_t, "goals": 0, "assists": 0, "minutes": 0, "games": 0, "cards": 0}
+        return player_db[name]
+
+    # --- 1. 得点ランキング (type=1) ---
+    goal_urls = [
+        "https://soccer.yahoo.co.jp/jleague/category/j1ss/stats?gk=249&type=1",
+        "https://soccer.yahoo.co.jp/jleague/category/j2j3ss/stats?gk=250&type=1"
+    ]
+    for url in goal_urls:
         try:
             req = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(req, timeout=8) as response:
-                html = response.read().decode('utf-8', errors='ignore')
-                soup = BeautifulSoup(html, 'html.parser')
-                
-                # Yahoo!スポーツのランキング表を解析
+                soup = BeautifulSoup(response.read().decode('utf-8', errors='ignore'), 'html.parser')
                 table = soup.find('table')
                 if table:
-                    for row in table.find_all('tr')[1:]: # ヘッダーを除外
+                    for row in table.find_all('tr')[1:]:
                         cols = row.find_all('td')
-                        if len(cols) >= 3:
-                            # Yahooの得点ランキングの一般的な並び: [順位, 選手名, チーム名, ...]
+                        if len(cols) >= 4:
                             p_name = cols[1].text.strip()
-                            t_name = normalize_team_name(cols[2].text.strip())
-                            
-                            # 上位10名程度をキープ（各ページから抽出）
-                            if p_name and t_name:
-                                top_players.append({"name": p_name, "team": t_name})
-        except Exception as e:
-            print(f"[ERROR] ランキングページの解析に失敗しました ({url}): {e}")
+                            t_name = cols[2].text.strip()
+                            goals = int(cols[3].text.strip()) if cols[3].text.strip().isdigit() else 0
+                            p = get_or_create_player(p_name, t_name)
+                            p["goals"] = goals
+        except Exception: pass
 
-    # 2. 各チームの判定処理ループ
+    # --- 2. アシストランキング (type=6) ---
+    assist_urls = [
+        "https://soccer.yahoo.co.jp/jleague/category/j1ss/stats?gk=249&type=6",
+        "https://soccer.yahoo.co.jp/jleague/category/j2j3ss/stats?gk=250&type=6"
+    ]
+    for url in assist_urls:
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=8) as response:
+                soup = BeautifulSoup(response.read().decode('utf-8', errors='ignore'), 'html.parser')
+                table = soup.find('table')
+                if table:
+                    for row in table.find_all('tr')[1:]:
+                        cols = row.find_all('td')
+                        if len(cols) >= 4:
+                            p_name = cols[1].text.strip()
+                            t_name = cols[2].text.strip()
+                            assists = int(cols[3].text.strip()) if cols[3].text.strip().isdigit() else 0
+                            p = get_or_create_player(p_name, t_name)
+                            p["assists"] = assists
+        except Exception: pass
+
+    # --- 3. 出場時間 (type=4) ---
+    min_urls = [
+        "https://soccer.yahoo.co.jp/jleague/category/j1ss/stats?gk=249&type=4",
+        "https://soccer.yahoo.co.jp/jleague/category/j2j3ss/stats?gk=250&type=4"
+    ]
+    for url in min_urls:
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=8) as response:
+                soup = BeautifulSoup(response.read().decode('utf-8', errors='ignore'), 'html.parser')
+                table = soup.find('table')
+                if table:
+                    for row in table.find_all('tr')[1:]:
+                        cols = row.find_all('td')
+                        if len(cols) >= 4:
+                            p_name = cols[1].text.strip()
+                            t_name = cols[2].text.strip()
+                            minutes = int(cols[3].text.strip().replace(",", "")) if cols[3].text.strip().replace(",", "").isdigit() else 0
+                            if p_name in player_db: # 得点/アシスト者に限定して紐付け
+                                player_db[p_name]["minutes"] = minutes
+        except Exception: pass
+
+    # --- 4. 出場試合数 (type=3) ---
+    game_urls = [
+        "https://soccer.yahoo.co.jp/jleague/category/j1ss/stats?gk=249&type=3",
+        "https://soccer.yahoo.co.jp/jleague/category/j2j3ss/stats?gk=250&type=3"
+    ]
+    for url in game_urls:
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=8) as response:
+                soup = BeautifulSoup(response.read().decode('utf-8', errors='ignore'), 'html.parser')
+                table = soup.find('table')
+                if table:
+                    for row in table.find_all('tr')[1:]:
+                        cols = row.find_all('td')
+                        if len(cols) >= 4:
+                            p_name = cols[1].text.strip()
+                            t_name = cols[2].text.strip()
+                            games = int(cols[3].text.strip()) if cols[3].text.strip().isdigit() else 0
+                            if p_name in player_db: # 得点/アシスト者に限定して紐付け
+                                player_db[p_name]["games"] = games
+        except Exception: pass
+
+    # --- 5. 警告・退場（typeなしのデフォルト画面からパース） ---
+    card_urls = [
+        "https://soccer.yahoo.co.jp/jleague/category/j1ss/stats",
+        "https://soccer.yahoo.co.jp/jleague/category/j2j3ss/stats"
+    ]
+    for url in card_urls:
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=8) as response:
+                soup = BeautifulSoup(response.read().decode('utf-8', errors='ignore'), 'html.parser')
+                # 警告ランキングのテーブルを特定（Yahooは通常、複数のテーブルがあるのでtrのヘッダー文字等で判定）
+                for table in soup.find_all('table'):
+                    rows = table.find_all('tr')
+                    if len(rows) > 1 and "警告" in rows[0].text:
+                        for row in rows[1:]:
+                            cols = row.find_all('td')
+                            if len(cols) >= 4:
+                                p_name = cols[1].text.strip()
+                                t_name = cols[2].text.strip()
+                                cards = int(cols[3].text.strip()) if cols[3].text.strip().isdigit() else 0
+                                if p_name in player_db:
+                                    player_db[p_name]["cards"] = cards
+        except Exception: pass
+
+    # --- 6. チームごとに情報を集計・判定するループ ---
     for idx, team in enumerate(target_teams):
         norm_team = normalize_team_name(team)
         star_player_status = []
         
-        # 取得した得点上位選手の中に、このチームの選手がいるか探す
-        # ※Web上の得点ランキングに載っている＝直近まで稼働しているエース級とみなします
-        for player in top_players:
-            if player["team"] == norm_team:
-                p_name = player["name"]
+        for p_name, data in player_db.items():
+            if data["team"] == norm_team:
+                # 1試合あたりの平均出場時間を計算
+                avg_min = 0
+                if data["games"] > 0:
+                    avg_min = round(data["minutes"] / data["games"], 1)
                 
-                # スクラップしたデータから「稼働中」として検出
-                star_player_status.append(f"{p_name}(ランキング入り)")
+                # 情報テキストの組み立て
+                p_info = f"{p_name}(得点:{data['goals']}/頁:{avg_min}分)"
+                
+                # 警告が溜まっている場合の情報追加
+                if data["cards"] >= 3:
+                    p_info += f"⚠️警告累積:{data['cards']}枚"
+                    
+                # 【離脱・異常値検知】
+                # ランキングに載るようなエースなのに、1試合平均の出場時間が極端に短い（例:30分未満）＝ケガ明け調整中か離脱・スタメン落ちの懸念
+                if data["games"] > 2 and avg_min < 30.0:
+                    p_info = f"【要警戒】{p_name}(直近稼働率低下:平均{avg_min}分)"
+                
+                star_player_status.append(p_info)
 
         # 判定結果をサマリーに格納
         if star_player_status:
             injury_summary[norm_team] = " / ".join(star_player_status)
         else:
-            injury_summary[norm_team] = "主要選手の離脱懸念なし（またはデータなし）"
+            injury_summary[norm_team] = "主要エースの稼働問題なし（またはランク外）"
 
     print("--- [INFO] Yahoo!スポーツからのデータ同期が完了しました ---")
     return injury_summary
