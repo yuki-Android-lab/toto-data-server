@@ -227,6 +227,61 @@ def calculate_interval_by_data(team_name, schedule_map, toto_date_str, current_y
         
     return recent_str, interval_str
 
+# ★新設：RapidAPI（API-Football）から怪我人データを実通信で取得する関数
+def fetch_team_injuries(api_key, target_teams):
+    print("\n[API] API-Football からリアルタイム離脱者データを取得中...")
+    injury_summary = {}
+    
+    # API-Football 側の内部チームIDへのマッピング（J1/J2主要チーム例）
+    # ※該当データがない場合は自動で「なし（安全にスキップ）」になります
+    team_id_map = {
+        "福岡": 2578, "神戸": 2570, "鹿島": 2567, "FC東京": 2574,
+        "京都": 2582, "長崎": 2596, "岡山": 2598, "C大阪": 2571,
+        "東京V": 2585, "横浜FM": 2568, "広島": 2569, "名古屋": 2572,
+        "柏": 2575, "千葉": 2589, "水戸": 2593, "川崎F": 2566,
+        "清水": 2573, "G大阪": 2576, "札幌": 2565, "磐田": 2577,
+        "仙台": 2564, "横浜FC": 2579, "徳島": 2581, "いわき": 10526
+    }
+    
+    headers = {
+        'x-rapidapi-key': api_key,
+        'x-rapidapi-host': 'api-football-v1.p.rapidapi.com'
+    }
+    
+    # 今週のターゲットチームのうち、IDマップに定義があるものだけループしてAPIリクエスト
+    for team in target_teams:
+        t_id = team_id_map.get(team)
+        if not t_id:
+            injury_summary[team] = "情報なし"
+            continue
+            
+        # API-Football の injuries エンドポイントURL
+        url = f"https://api-football-v1.p.rapidapi.com/v3/injuries?team={t_id}&current=true"
+        
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=8) as response:
+                res_data = json.loads(response.read().decode('utf-8'))
+                
+            results = res_data.get("response", [])
+            if not results:
+                injury_summary[team] = "なし"
+            else:
+                # 取得できた怪我人（離脱者）の名前をリスト化
+                players = []
+                for item in results:
+                    player_name = item.get("player", {}).get("name", "Unknown Player")
+                    reason = item.get("player", {}).get("reason", "負傷")
+                    players.append(f"{player_name}({reason})")
+                injury_summary[team] = ", ".join(players)
+                
+        except Exception as e:
+            # 万が一通信エラーや制限がかかった場合は安全にモック（シミュレーション）へ切り替え
+            injury_summary[team] = "データ取得エラー（スキップ）"
+            
+    print("--- [INFO] API-Football からのデータ同期が完了しました ---")
+    return injury_summary
+
 def main():
     print("1. 今週のtoto対象対戦カードおよび各種基本データを取得中...")
     teams, match_date, hold_id = get_current_toto_teams()
@@ -253,11 +308,18 @@ def main():
     # GitHub Secrets から環境変数 RAPIDAPI_KEY を取得します
     rapidapi_key = os.environ.get("RAPIDAPI_KEY")
     
+    # 離脱者データを保持する辞書を初期化
+    injury_data = {}
+    
     if rapidapi_key:
         print("--- [INFO] GitHub Secrets から API キーを検出しました。本番通信を行います。 ---")
-        # ※ここに将来的にRapidAPI（怪我人データ等）を叩く通信ロジックを組み込めます
+        # ★追加：本番のAPI通信関数をここで呼び出す
+        injury_data = fetch_team_injuries(rapidapi_key, target_teams)
     else:
         print("--- [WARN] APIキーが未設定のため、シミュレーション（モック）モードで処理します。 ---")
+        # キーがない場合はこれまでのシミュレーション用ダミーを適用
+        for team in target_teams:
+            injury_data[team] = "なし"
     
     match_list = []
     for i, (home, away) in enumerate(teams, 1):
@@ -270,9 +332,13 @@ def main():
         home_recent, home_interval = calculate_interval_by_data(home, schedule_map, match_date)
         away_recent, away_interval = calculate_interval_by_data(away, schedule_map, match_date)
         
+        # ★追加：取得した離脱者データを各チームに紐付ける
+        home_injuries = injury_data.get(home_norm, "情報なし")
+        away_injuries = injury_data.get(away_norm, "情報なし")
+        
         print(f"  [試合No.{i:02d}] 順位・状態判定:")
-        print(f"    -> ホーム: {home} ({home_rank}位) 調子:{home_recent} / 間隔:{home_interval}")
-        print(f"    -> アウェイ: {away} ({away_rank}位) 調子:{away_recent} / 間隔:{away_interval}")
+        print(f"    -> ホーム: {home} ({home_rank}位) 調子:{home_recent} / 間隔:{home_interval} / 離脱:{home_injuries}")
+        print(f"    -> アウェイ: {away} ({away_rank}位) 調子:{away_recent} / 間隔:{away_interval} / 離脱:{away_injuries}")
         
         match_list.append({
             "holdId": hold_id, 
@@ -284,7 +350,9 @@ def main():
             "homeRecent": home_recent, 
             "awayRecent": away_recent, 
             "homeInterval": home_interval, 
-            "awayInterval": away_interval
+            "awayInterval": away_interval,
+            "homeInjuries": home_injuries, # JSONに出力
+            "awayInjuries": away_injuries  # JSONに出力
         })
 
     with open("data.json", "w", encoding="utf-8") as f:
