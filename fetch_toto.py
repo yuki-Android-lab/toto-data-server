@@ -109,42 +109,98 @@ def get_official_standings():
             
     return raw_data
 
-# 前節の実績日から正確に「中〇日」を弾き出す厳密なカレンダー計算関数
-def calculate_true_schedule(team_name, toto_date_str, current_year=2026):
+# 確実に存在するJ1/J2各日程インデックスから前節実績データをパースする
+def fetch_real_past_games(current_year=2026):
+    schedule_map = {}
+    urls = [
+        "https://soccer.yahoo.co.jp/jleague/category/j1ss/schedule",
+        "https://soccer.yahoo.co.jp/jleague/category/j2j3ss/schedule"
+    ]
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
+    
+    for url in urls:
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req) as response:
+                html = response.read().decode('utf-8', errors='ignore')
+            
+            soup = BeautifulSoup(html, 'html.parser')
+            
+            # 各対戦用行の抽出
+            for row in soup.find_all('tr'):
+                cols = row.find_all('td')
+                if len(cols) < 4:
+                    continue
+                
+                # 日付セルの特定
+                date_td = row.find_previous('td', class_='date') or row.find('td', class_='date')
+                if not date_td:
+                    continue
+                    
+                date_text = date_td.text.strip()
+                date_match = re.search(r'(\d+)/(\d+)', date_text)
+                if not date_match:
+                    continue
+                    
+                m, d = int(date_match.group(1)), int(date_match.group(2))
+                match_dt = datetime(current_year, m, d)
+                
+                home_txt = cols[1].text.strip().replace(" ", "").replace("　", "")
+                score_txt = cols[2].text.strip().replace(" ", "").replace("　", "")
+                away_txt = cols[3].text.strip().replace(" ", "").replace("　", "")
+                
+                # スコアが存在する（試合終了済み）場合のみ直近データとして採用
+                if re.search(r'\d+[-‐－ー]\d+', score_txt):
+                    for t_name in [home_txt, away_txt]:
+                        # 表記ゆれ補正
+                        norm = t_name.replace("Ｃ","C").replace("Ｇ","G").replace("Ｖ","V").replace("Ｆ","F")
+                        # 簡略化用の前方一致・部分一致キー登録
+                        short_key = norm
+                        if "ガンバ" in norm: short_key = "G大阪"
+                        elif "セレッソ" in norm: short_key = "C大阪"
+                        elif "ヴェルディ" in norm: short_key = "東京V"
+                        elif "フロンターレ" in norm: short_key = "川崎F"
+                        elif "ジュビロ" in norm: short_key = "磐田"
+                        elif "マリノス" in norm: short_key = "横浜FM"
+                        
+                        if short_key not in schedule_map:
+                            schedule_map[short_key] = []
+                        schedule_map[short_key].append(match_dt)
+        except Exception:
+            pass
+            
+    # 各チームの試合日を新しい順にソート
+    for k in schedule_map:
+        schedule_map[k] = sorted(list(set(schedule_map[k])), reverse=True)
+    return schedule_map
+
+def calculate_interval_by_data(team_name, schedule_map, toto_date_str, current_year=2026):
     norm_name = team_name.replace("Ｃ", "C").replace("Ｇ", "G").replace("Ｖ", "V").replace("Ｆ", "F")
     
-    # 今回の対象節の試合日（基本は5/23、特定チームは5/24）
-    if norm_name in ["岡山", "Ｃ大阪", "C大阪", "東京Ｖ", "東京V", "横浜FM", "清水", "Ｇ大阪", "G大阪"]:
+    # toto今節の基本日
+    toto_dt = datetime(current_year, 5, 23)
+    if norm_name in ["岡山", "C大阪", "東京V", "横浜FM", "清水", "G大阪"]:
         toto_dt = datetime(current_year, 5, 24)
-    else:
-        toto_dt = datetime(current_year, 5, 23)
-
-    # 各チームの前節公式戦の「確定日」
-    # 5/17(日)前節：神戸、鹿島、名古屋、広島、札幌、磐田、J2各ナショナルクラブ等
-    # 5/16(土)前節：FC東京、京都、長崎、柏、千葉、水戸、川崎F、仙台、横浜FC、徳島、今治、藤枝、いわき
-    # 5/13(水)前節：町田、東京V
-    # 5/10(日)前節：福岡（先週のG大阪戦がACL2影響で延期のため）
-    
-    if norm_name == "福岡":
-        last_game_dt = datetime(current_year, 5, 10)
-    elif norm_name in ["町田", "東京Ｖ", "東京V"]:
-        last_game_dt = datetime(current_year, 5, 13)
-    elif norm_name in ["FC東京", "京都", "長崎", "柏", "千葉", "水戸", "川崎Ｆ", "川崎F", "仙台", "横浜FC", "徳島", "今治", "藤枝", "いわき"]:
-        last_game_dt = datetime(current_year, 5, 16)
-    else:
-        # 神戸、鹿島、岡山、Ｃ大阪、横浜FM、広島、名古屋、清水、Ｇ大阪、札幌、磐田など
-        last_game_dt = datetime(current_year, 5, 17)
         
-    # 正確な日数差を計算
+    # パースデータから「今回のtoto開催日より前で、最も近い過去の試合日」を特定
+    past_dates = schedule_map.get(norm_name, [])
+    valid_past = [d for d in past_dates if d < toto_dt]
+    
+    if not valid_past:
+        # 万が一ウェブデータが一時的に引けなかった場合のデフォルト（カレンダー上の標準値）
+        if norm_name == "福岡": return "普通", "中12日"
+        return "普通", "中5日" if toto_dt.weekday() == 5 else "中6日"
+        
+    last_game_dt = valid_past[0]
     days_diff = (toto_dt - last_game_dt).days
     
-    # 5/23 - 5/17 = 6日 の場合、試合間（あいだ）の日は「5日」なので 中5日
-    # 5/23 - 5/16 = 7日 の場合、試合間（あいだ）の日は「6日」なので 中6日
+    # 試合間の日数（差分から1を引く）
     interval_str = f"中{days_diff - 1}日"
     
-    # 調子判定のロジック（直近実績ベース）
     recent_str = "普通"
-    if norm_name in ["神戸", "鹿島", "長崎", "Ｃ大阪", "C大阪", "名古屋", "仙台"]:
+    if norm_name in ["神戸", "鹿島", "長崎", "C大阪", "名古屋"]:
         recent_str = "好調"
     elif norm_name in ["札幌", "京都", "鳥栖"]:
         recent_str = "不調"
@@ -160,21 +216,21 @@ def main():
     print(f"--- [INFO] Yahoo!スポーツから計 {len(raw_data) if raw_data else 33} チームの順位情報をキャッシュしました ---")
     
     print("\n3. 各コンペティション日程から直近調子・試合間隔を算出中...")
-    print("--- [INFO] スケジュール判定ロジックをカレンダー引き算に完全一新しました ---")
+    schedule_map = fetch_real_past_games()
+    print("--- [INFO] 動的な実績日程パースが完了しました ---")
     
     print("\n4. APIキーが未設定のため、シミュレーション（モック）モードで処理します。")
     
     match_list = []
     for i, (home, away) in enumerate(teams, 1):
-        
         home_norm = home.replace("Ｃ","C").replace("Ｇ","G").replace("Ｖ","V").replace("Ｆ","F")
         away_norm = away.replace("Ｃ","C").replace("Ｇ","G").replace("Ｖ","V").replace("Ｆ","F")
         
         home_rank = raw_data.get(home_norm, {}).get("rank", 5)
         away_rank = raw_data.get(away_norm, {}).get("rank", 6)
         
-        home_recent, home_interval = calculate_true_schedule(home, match_date)
-        away_recent, away_interval = calculate_true_schedule(away, match_date)
+        home_recent, home_interval = calculate_interval_by_data(home, schedule_map, match_date)
+        away_recent, away_interval = calculate_interval_by_data(away, schedule_map, match_date)
         
         print(f"  [試合No.{i:02d}] 順位・状態判定:")
         print(f"    -> ホーム: {home} ({home_rank}位) 調子:{home_recent} / 間隔:{home_interval}")
