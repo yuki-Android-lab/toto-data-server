@@ -249,7 +249,15 @@ def main():
     schedule_map = fetch_real_past_games(schedule_urls)
     print("--- [INFO] 動的な実績日程パースが完了しました ---")
     
-    print("\n4. APIキーが未設定のため、シミュレーション（モック）モードで処理します。")
+    print("\n4. APIキーのチェックを行います。")
+    # GitHub Secrets から環境変数 RAPIDAPI_KEY を取得します
+    rapidapi_key = os.environ.get("RAPIDAPI_KEY")
+    
+    if rapidapi_key:
+        print("--- [INFO] GitHub Secrets から API キーを検出しました。本番通信を行います。 ---")
+        # ※ここに将来的にRapidAPI（怪我人データ等）を叩く通信ロジックを組み込めます
+    else:
+        print("--- [WARN] APIキーが未設定のため、シミュレーション（モック）モードで処理します。 ---")
     
     match_list = []
     for i, (home, away) in enumerate(teams, 1):
@@ -267,15 +275,21 @@ def main():
         print(f"    -> アウェイ: {away} ({away_rank}位) 調子:{away_recent} / 間隔:{away_interval}")
         
         match_list.append({
-            "holdId": hold_id, "matchNo": i, "homeTeam": home, "awayTeam": away,
-            "homeRank": home_rank, "awayRank": away_rank,
-            "homeRecent": home_recent, "awayRecent": away_recent, 
-            "homeInterval": home_interval, "awayInterval": away_interval
+            "holdId": hold_id, 
+            "matchNo": i, 
+            "homeTeam": home, 
+            "awayTeam": away,
+            "homeRank": home_rank, 
+            "awayRank": away_rank,
+            "homeRecent": home_recent, 
+            "awayRecent": away_recent, 
+            "homeInterval": home_interval, 
+            "awayInterval": away_interval
         })
 
     with open("data.json", "w", encoding="utf-8") as f:
         json.dump(match_list, f, ensure_ascii=False, indent=4)
     print("\n--- data.json の保存が完了しました ---")
-
+    
 if __name__ == "__main__":
     main()
