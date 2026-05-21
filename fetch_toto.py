@@ -25,6 +25,17 @@ def normalize_team_name(name):
             return v
     return norm
 
+# ★本命API（API-Football）が認識できるJリーグチームIDのマッピング辞書
+J_TEAM_IDS = {
+    "福岡": 4124, "神戸": 302, "鹿島": 294, "FC東京": 298, 
+    "京都": 4121, "長崎": 2351, "岡山": 2348, "C大阪": 301, 
+    "東京V": 2344, "横浜FM": 295, "広島": 300, "名古屋": 299, 
+    "柏": 297, "千葉": 2346, "水戸": 2349, "川崎F": 296, 
+    "清水": 303, "G大阪": 293, "札幌": 304, "磐田": 4123, 
+    "仙台": 4122, "横浜FC": 4125, "徳島": 4126, "今治": 14041,
+    "藤枝": 10243, "いわき": 14042
+}
+
 def get_current_toto_teams():
     toto_teams = []
     match_date = "5/23" 
@@ -196,7 +207,7 @@ def fetch_real_past_games(urls, current_year=2026):
 def calculate_interval_by_data(team_name, schedule_map, toto_date_str, current_year=2026):
     norm_name = normalize_team_name(team_name)
     toto_dt = datetime(current_year, 5, 23)
-    if norm_name in ["岡山", "C大阪", "東京V", "横浜FM", "清水", "G大阪"]:
+    if norm_name in ["岡山", "C伴島", "東京V", "横浜FM", "清水", "G大阪"]:
         toto_dt = datetime(current_year, 5, 24)
         
     past_dates = schedule_map.get(norm_name, [])
@@ -218,62 +229,55 @@ def calculate_interval_by_data(team_name, schedule_map, toto_date_str, current_y
         
     return recent_str, interval_str
 
+# ★修正：API-Footballの正式な負傷者（injuries）エンドポイントへ、チームIDを使って正確に通信するロジック
 def fetch_team_injuries(api_key, target_teams):
-    print("\n[API] 無料APIライブサッカーデータ からリアルタイム離脱者データを取得中...")
+    print("\n[API] API-Football からリアルタイム離脱者データを取得中...")
     injury_summary = {}
     
-    # RapidAPI公式標準の大文字・小文字表記に変更
     headers = {
         'X-RapidAPI-Key': api_key,
         'X-RapidAPI-Host': 'free-api-live-football-data.p.rapidapi.com'
     }
     
+    # 2026シーズン（API-Football側の指定用）
+    current_season = 2026
+    
     for team in target_teams:
-        encoded_team = urllib.parse.quote(team)
-        url = f"https://free-api-live-football-data.p.rapidapi.com/football-players-search?search={encoded_team}"
+        team_id = J_TEAM_IDS.get(team)
+        
+        # マッピングにない新規J3チーム等の場合はスキップ
+        if not team_id:
+            injury_summary[team] = "情報なし"
+            continue
+            
+        # API-Football公式の「injuries」取得用URL（チームIDとシーズンでピンポイント指定）
+        url = f"https://free-api-live-football-data.p.rapidapi.com/injuries?team={team_id}&season={current_season}"
         
         try:
             req = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(req, timeout=8) as response:
-                raw_body = response.read().decode('utf-8')
+                res_data = json.loads(response.read().decode('utf-8'))
                 
-                # 返ってきた生データがそもそもJSON辞書型としてパースできるかチェック
-                try:
-                    res_data = json.loads(raw_body)
-                except Exception:
-                    # 文字列のまま返ってきた場合は、その内容を出力してスキップ
-                    injury_summary[team] = f"非JSONレスポンス受信（内容: {raw_body[:30]}）"
-                    continue
-                
-            # パースした結果が辞書型（dict）ではない場合へのセーフティガード
-            if not isinstance(res_data, dict):
-                injury_summary[team] = f"レスポンスが辞書型ではありません（型: {type(res_data).__name__}）"
-                continue
-                
-            results = res_data.get("response", []) or res_data.get("results", [])
-            # もしリスト型としてデータが取れていなければ、安全に「なし」とする
-            if not isinstance(results, list) or not results:
+            results = res_data.get("response", [])
+            if not results or not isinstance(results, list):
                 injury_summary[team] = "なし"
             else:
                 injured_players = []
-                for player in results:
-                    if not isinstance(player, dict):
-                        continue
-                    status = player.get("status", "")
-                    is_injured = player.get("injured", False)
-                    if is_injured or "Injured" in str(status) or "傷" in str(status):
-                        p_name = player.get("name", "不明な選手")
-                        injured_players.append(f"{p_name}(負傷)")
+                for item in results:
+                    player_info = item.get("player", {})
+                    p_name = player_info.get("name", "不明な選手")
+                    reason = item.get("injury", {}).get("type", "負傷")
+                    injured_players.append(f"{p_name}({reason})")
                 
                 if injured_players:
                     injury_summary[team] = ", ".join(injured_players)
                 else:
                     injury_summary[team] = "なし"
                 
-        except Exception as e:
-            injury_summary[team] = f"データ取得エラー（原因: {e}）"
+        except Exception:
+            injury_summary[team] = "データ取得エラー（スキップ）"
             
-    print("--- [INFO] サッカーAPIからのデータ同期処理が完了しました ---")
+    print("--- [INFO] API-Football からのデータ同期が完了しました ---")
     return injury_summary
 
 def main():
@@ -286,7 +290,7 @@ def main():
         
     target_teams = list(set([t for match in teams for t in match]))
     
-    print("\n[システム] リーグ最新URL（通常戦/特別戦）を自動スキャン中...")
+    print("\n[システム] リーグ最新URLを自動スキャン中...")
     standings_urls, schedule_urls = detect_current_league_urls()
     
     print("\n2. 各リーグの最新順位データを収集中...")
