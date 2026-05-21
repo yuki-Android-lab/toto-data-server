@@ -231,73 +231,66 @@ def calculate_interval_by_data(team_name, schedule_map, toto_date_str, current_y
     return recent_str, interval_str
 
 def fetch_team_injuries(api_key, target_teams):
-    print("\n[API] API-Football からリアルタイム離脱者データを取得中...")
+    print("\n[国内スクレイピング] Yahoo!スポーツから得点ランキング（主力選手）データを取得中...")
     injury_summary = {}
     
+    # Yahoo!スポーツのJ1・J2得点ランキングURL
+    ranking_urls = [
+        "https://soccer.yahoo.co.jp/jleague/category/j1/ranking/goals",
+        "https://soccer.yahoo.co.jp/jleague/category/j2/ranking/goals"
+    ]
+    
     headers = {
-        'X-RapidAPI-Key': api_key,
-        'X-RapidAPI-Host': 'free-api-live-football-data.p.rapidapi.com'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
     
-    current_season = 2026
+    top_players = [] # (選手名, チーム名) のリストを入れる
     
-    # ★★★ 正しい位置への移動：APIリクエストを送るループの内部に設置 ★★★
-# ★★★ 改良：APIリクエストはループの外で「1回だけ」実行 ★★★
-    top_players = []
-    url = "https://free-api-live-football-data.p.rapidapi.com/top-players-goals?league=j1&season=2026"
-    
-    try:
-        print("[INFO] リーグのトッププレイヤー（得点上位）データを取得中...")  # ← print に修正
-        req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, timeout=8) as response:
-            res_data = json.loads(response.read().decode('utf-8'))
-            top_players = res_data.get("response", [])
-    except Exception as e:
-        print(f"[ERROR] トッププレイヤーデータの取得に失敗しました: {e}")  # ← print に修正
-        
-    # 各チームの判定処理ループ
+    # 1. ランキングページから上位選手をスキャン
+    for url in ranking_urls:
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=8) as response:
+                html = response.read().decode('utf-8', errors='ignore')
+                soup = BeautifulSoup(html, 'html.parser')
+                
+                # Yahoo!スポーツのランキング表を解析
+                table = soup.find('table')
+                if table:
+                    for row in table.find_all('tr')[1:]: # ヘッダーを除外
+                        cols = row.find_all('td')
+                        if len(cols) >= 3:
+                            # Yahooの得点ランキングの一般的な並び: [順位, 選手名, チーム名, ...]
+                            p_name = cols[1].text.strip()
+                            t_name = normalize_team_name(cols[2].text.strip())
+                            
+                            # 上位10名程度をキープ（各ページから抽出）
+                            if p_name and t_name:
+                                top_players.append({"name": p_name, "team": t_name})
+        except Exception as e:
+            print(f"[ERROR] ランキングページの解析に失敗しました ({url}): {e}")
+
+    # 2. 各チームの判定処理ループ
     for idx, team in enumerate(target_teams):
-        # ------------------------------------------------------------
-        # 【将来用メモ】今後ループ内でAPIを叩く場合は、以下の3行のコメントアウトを外す
-        # if idx > 0:
-        #     print(f"API負荷軽減のため、10秒間スリープします... (進捗: {idx}/{len(target_teams)})")
-        #     time.sleep(10)
-        # ------------------------------------------------------------
-        team_id = J_TEAM_IDS.get(team)
-        if not team_id:
-            injury_summary[team] = "情報なし"
-            continue
-            
-        # ★★★ ここにご希望の「判定ロジック」を組み込みます ★★★
+        norm_team = normalize_team_name(team)
         star_player_status = []
         
-        # 取得したトップ10選手の中に、このチームの選手がいるか探す
-        for item in top_players:
-            player_info = item.get("player", {})
-            statistics = item.get("statistics", [{}])[0] # 直近または今季のスタッツを取得
-            
-            # 選手の所属チーム名（またはチームID）が一致するかチェック
-            # ※APIの仕様に合わせて、player_info.get("team", {}).get("name") などで判定します
-            p_team = player_info.get("team", {}).get("name", "")
-            
-            # チーム名が一致した場合（例: "福岡" や "Fukuoka" などが含まれるか）
-            if team in p_team or p_team in team:
-                p_name = player_info.get("name", "不明な選手")
-                minutes = statistics.get("games", {}).get("minutes", 0) # 出場時間
+        # 取得した得点上位選手の中に、このチームの選手がいるか探す
+        # ※Web上の得点ランキングに載っている＝直近まで稼働しているエース級とみなします
+        for player in top_players:
+            if player["team"] == norm_team:
+                p_name = player["name"]
                 
-                # 【ご希望の判定】もし直近（または今季）の出場時間が0、あるいはデータがなければ
-                if minutes == 0:
-                    star_player_status.append(f"【注目】トップ選手（{p_name}）が直近の試合に未出場です（離脱の可能性あり）")
-                else:
-                    star_player_status.append(f"{p_name}(稼働中: {minutes}分)")
+                # スクラップしたデータから「稼働中」として検出
+                star_player_status.append(f"{p_name}(ランキング入り)")
 
         # 判定結果をサマリーに格納
         if star_player_status:
-            injury_summary[team] = " / ".join(star_player_status)
+            injury_summary[norm_team] = " / ".join(star_player_status)
         else:
-            injury_summary[team] = "主要選手の離脱懸念なし（またはデータなし）"
+            injury_summary[norm_team] = "主要選手の離脱懸念なし（またはデータなし）"
 
-    print("--- [INFO] API-Football からのデータ同期が完了しました ---")
+    print("--- [INFO] Yahoo!スポーツからのデータ同期が完了しました ---")
     return injury_summary
     
 def main():
