@@ -247,15 +247,14 @@ def fetch_team_injuries(api_key, target_teams):
     url = "https://free-api-live-football-data.p.rapidapi.com/top-players-goals?league=j1&season=2026"
     
     try:
-        log_info("リーグのトッププレイヤー（得点上位）データを取得中...")
+        print("[INFO] リーグのトッププレイヤー（得点上位）データを取得中...")  # ← print に修正
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=8) as response:
             res_data = json.loads(response.read().decode('utf-8'))
-            # APIのレスポンス構造（通常は response または data の中にリストが入ります）
             top_players = res_data.get("response", [])
     except Exception as e:
-        log_error(f"トッププレイヤーデータの取得に失敗しました: {e}")
-
+        print(f"[ERROR] トッププレイヤーデータの取得に失敗しました: {e}")  # ← print に修正
+        
     # 各チームの判定処理ループ
     for idx, team in enumerate(target_teams):
         # ------------------------------------------------------------
