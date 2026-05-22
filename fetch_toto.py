@@ -151,7 +151,20 @@ def get_official_standings(urls, target_teams):
                                 continue
                             try:
                                 rank = int(cols[0].text.strip()) if cols[0].text.strip().isdigit() else 99
-                                raw_data[team] = {"rank": rank, "goals": 15}
+# 💡得点(8列目)と失点(9列目)を確実に取得（インデックスは0から始まるため8と9）
+                                goals_for = 0
+                                goals_against = 0
+                                if len(cols) >= 10:
+                                    g_txt = cols[8].text.strip()
+                                    a_txt = cols[9].text.strip()
+                                    goals_for = int(g_txt) if g_txt.isdigit() else 0
+                                    goals_against = int(a_txt) if a_txt.isdigit() else 0
+                                
+                                raw_data[team] = {
+                                    "rank": rank,
+                                    "goalsFor": goals_for,      # 本物の総得点
+                                    "goalsAgainst": goals_against # 本物の総失点
+                                }
                             except Exception:
                                 continue
         except Exception:
@@ -400,6 +413,12 @@ def main():
         print(f"    -> ホーム: {home} ({home_rank}位) 調子:{home_recent} / 間隔:{home_interval} / 離脱:{home_injuries} ({home_injuries_count}人)")
         print(f"    -> アウェイ: {away} ({away_rank}位) 調子:{away_recent} / 間隔:{away_interval} / 離脱:{away_injuries} ({away_injuries_count}人)")
         
+# キャッシュしたデータから本物の得失点を取り出す（なければ0）
+        home_g_for = raw_data.get(home_norm, {}).get("goalsFor", 0)
+        home_g_against = raw_data.get(home_norm, {}).get("goalsAgainst", 0)
+        away_g_for = raw_data.get(away_norm, {}).get("goalsFor", 0)
+        away_g_against = raw_data.get(away_norm, {}).get("goalsAgainst", 0)
+
         match_list.append({
             "holdId": hold_id, 
             "matchNo": i, 
@@ -407,14 +426,19 @@ def main():
             "awayTeam": away,
             "homeRank": home_rank, 
             "awayRank": away_rank,
+            
+            # 💡 アプリ側のMatchData.ktの変数名と完全に一致させて出力！
+            "homeGoalsFor": home_g_for,
+            "homeGoalsAgainst": home_g_against,
+            "awayGoalsFor": away_g_for,
+            "awayAgainst": away_g_against, # アプリ側が「awayGoalsAgainst」か「awayAgainst」か定義に合わせてください
+            
             "homeRecent": home_recent, 
             "awayRecent": away_recent, 
             "homeInterval": home_interval, 
             "awayInterval": away_interval,
             "homeInjuries": home_injuries,
             "awayInjuries": away_injuries,
-            
-            # ★ ここで新項目をJSONに出力します！
             "homeInjuriesCount": home_injuries_count,
             "awayInjuriesCount": away_injuries_count
         })
