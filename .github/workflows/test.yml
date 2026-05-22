@@ -1,7 +1,7 @@
 name: Scraping Test
 
 on:
-  workflow_dispatch: # 💡 これを入れることで、GitHub上のボタンから手動でいつでも実行できるようになります
+  workflow_dispatch:
 
 jobs:
   run-test:
@@ -15,9 +15,10 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: 必要なライブラリをインストール
+      - name: 必要なライブラリと本物ブラウザのインストール
         run: |
-          pip install requests beautifulsoup4
+          pip install playwright beautifulsoup4
+          playwright install chromium
 
       - name: テストスクリプトを実行
         run: |
