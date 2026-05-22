@@ -4,55 +4,47 @@ from bs4 import BeautifulSoup
 
 url = "https://www.totoone.jp/match/27736"
 
-print(f"🔄 {url} へ本物ブラウザ（headless Chrome）で隠密アクセスを開始します...")
+print(f"🔄 {url} から選手情報のHTML配置を特定します...")
 
 with sync_playwright() as p:
-    # ブラウザを起動（ユーザーエージェントを偽装して人間っぽく振る舞う）
     browser = p.chromium.launch(headless=True)
     context = browser.new_context(
         user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     )
     page = context.new_page()
-    
-    # ページを開く
     page.goto(url, wait_until="domcontentloaded")
     
-    print("⏳ データの読み込み（ローディング表示の終了）を少し待ちます...")
-    # 1秒間、画面がレンダリングされるのを物理的に待つ
-    time.sleep(2.0)
-    
-    # 展開された後の本物のHTMLソースを取得
+    # 完全に描画されるまで少し長めに待機
+    time.sleep(3.0)
     html_content = page.content()
     browser.close()
 
-# 展開後のHTMLを解析
 soup = BeautifulSoup(html_content, 'html.parser')
 
 print("\n=============================================")
-print("🔍 【ブラウザ展開後デバッグ1】ページタイトル")
+print("🎯 【特定ログ】『選手情報』周辺のHTMLテキスト抽出")
 print("=============================================")
-print(soup.find('title').get_text().strip() if soup.find('title') else "タイトルなし")
 
-print("\n=============================================")
-print("🔍 【ブラウザ展開後デバッグ2】探知されたテーブル行（tr）")
-print("=============================================")
-rows = soup.find_all('tr')
-print(f"ブラウザ起動によって探知された総テーブル行数: {len(rows)}")
+# 💡 キーワード「欠場濃厚」または「出場停止」が含まれる要素の親をたどる
+keywords = ["欠場濃厚", "出場停止", "出場微妙", "橋本悠", "扇原貴宏"]
+found = False
 
-count = 0
-for row in rows:
-    cells = [cell.get_text().strip() for cell in row.find_all(['td', 'th'])]
-    if cells:
-        print(f"\n[行番号 {count}] セル内容: {cells}")
-        count += 1
-        if count >= 20:
-            print("\n...（20行以降は省略）...")
-            break
+for kw in keywords:
+    elements = soup.find_all(text=lambda text: text and kw in text)
+    if elements:
+        print(f"\n🔑 キーワード 【{kw}】 が見つかりました！(検知数: {len(elements)})")
+        found = True
+        for idx, elem in enumerate(elements):
+            # その文字を囲んでいる親タグ（divやspanなど）の構造を3階層上まで出力
+            parent = elem.parent
+            print(f"  [{idx}] 文字列: '{elem.strip()}'")
+            print(f"      └ 親タグ: <{parent.name}> クラス名: {parent.get('class')}")
+            if parent.parent:
+                print(f"      └ 祖父タグ: <{parent.parent.name}> クラス名: {parent.parent.get('class')}")
+            if parent.parent and parent.parent.parent:
+                print(f"      └ 曽祖父タグ: <{parent.parent.parent.name}> クラス名: {parent.parent.parent.get('class')}")
 
-if len(rows) == 0:
-    print("\n⚠️ まだテーブルが0件です。文字データとしてページ内に残っているか確認します:")
-    text_snippet = soup.get_text()
-    if "欠場" in text_snippet or "出場停止" in text_snippet:
-        print("💡 テーブル形式ではないですが、ページ内に『欠場』や『出場停止』の文字自体は存在しています！")
-    else:
-        print("❌ ページ内に怪我人に関するキーワードが見当たりません。")
+if not found:
+    print("⚠️ 指定したキーワードがHTML内に見つかりませんでした。")
+    print("念のため、ページ全体の文字情報を最初の2000文字だけ出力します：")
+    print(soup.get_text()[:2000])
