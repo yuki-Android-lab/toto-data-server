@@ -319,12 +319,17 @@ def fetch_team_injuries(api_key, target_teams):
                     
                     star_player_status.append(p_info)
 
-        # サマリーへの格納
+        # サマリーへの格納（テキストと人数をセットにする）
         if star_player_status:
-            injury_summary[norm_team] = " / ".join(star_player_status)
+            injury_summary[norm_team] = {
+                "text": " / ".join(star_player_status),
+                "count": len(star_player_status)  # 💡ここで人数をカウント！
+            }
         else:
-            injury_summary[norm_team] = "主要エースの稼働問題なし（またはデータなし）"
-
+            injury_summary[norm_team] = {
+                "text": "主要エースの稼働問題なし（またはデータなし）",
+                "count": 0
+            }
     print("--- [INFO] Yahoo!スポーツからのデータ同期が完了しました ---")
     return injury_summary
     
