@@ -154,9 +154,9 @@ def get_official_standings(urls, target_teams):
 # 💡得点(8列目)と失点(9列目)を確実に取得（インデックスは0から始まるため8と9）
                                 goals_for = 0
                                 goals_against = 0
-                                if len(cols) >= 10:
-                                    g_txt = cols[8].text.strip()
-                                    a_txt = cols[9].text.strip()
+                                if len(cols) >= 11:
+                                    g_txt = cols[9].text.strip()
+                                    a_txt = cols[10].text.strip()
                                     goals_for = int(g_txt) if g_txt.isdigit() else 0
                                     goals_against = int(a_txt) if a_txt.isdigit() else 0
                                 
@@ -431,7 +431,7 @@ def main():
             "homeGoalsFor": home_g_for,
             "homeGoalsAgainst": home_g_against,
             "awayGoalsFor": away_g_for,
-            "awayAgainst": away_g_against, # アプリ側が「awayGoalsAgainst」か「awayAgainst」か定義に合わせてください
+            "awayGoalsAgainst": away_g_against,
             
             "homeRecent": home_recent, 
             "awayRecent": away_recent, 
