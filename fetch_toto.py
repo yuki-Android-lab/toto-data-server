@@ -231,7 +231,7 @@ def calculate_interval_by_data(team_name, schedule_map, toto_date_str, current_y
     return recent_str, interval_str
 
 def fetch_team_injuries(api_key, target_teams):
-    print("\n[国内スクレイピング] Yahoo!スポーツ(SS版スタッツ)から全スタッツを一括回収中...")
+    print("\n[国内スクレイピング] Yahoo!スポーツ(SS版スタッツ)から実質攻撃貢献度(90分換算)を算出中...")
     injury_summary = {}
     
     headers = {
@@ -241,7 +241,6 @@ def fetch_team_injuries(api_key, target_teams):
     # 蓄積用データ構造
     player_db = {}
 
-    # 叩くURLは、すべてが網羅されているこの2つだけで完結！
     target_urls = [
         "https://soccer.yahoo.co.jp/jleague/category/j1ss/stats?gk=249&type=1",
         "https://soccer.yahoo.co.jp/jleague/category/j2j3ss/stats?gk=250&type=1"
@@ -253,21 +252,18 @@ def fetch_team_injuries(api_key, target_teams):
             with urllib.request.urlopen(req, timeout=10) as response:
                 soup = BeautifulSoup(response.read().decode('utf-8', errors='ignore'), 'html.parser')
                 
-                # クラス名 'sc-tableStats' のテーブルを狙い撃ち
                 table = soup.find('table', class_='sc-tableStats') or soup.find('table')
                 if not table:
                     continue
                 
                 for row in table.find_all('tr'):
-                    # td がない（thだけのヘッダー行）はスキップ
                     if not row.find('td'):
                         continue
                         
                     cols = row.find_all('td')
-                    if len(cols) < 13: # 警告まで含めて13列以上あることを確認
+                    if len(cols) < 12: # 出場時間(11列目)まで確保されているか確認
                         continue
                     
-                    # ログの検証結果に基づく正確な列マッピング
                     p_name = cols[1].text.strip().replace(" ", "").replace("　", "")
                     t_name = cols[2].text.strip()
                     
@@ -277,17 +273,8 @@ def fetch_team_injuries(api_key, target_teams):
                     
                     minutes_txt = cols[11].text.strip().replace(",", "")
                     minutes = int(minutes_txt) if minutes_txt.isdigit() else 0
-                    
-                    # 警告/退場 (例: "1/0" の左側を取り出す)
-                    cards = 0
-                    cards_txt = cols[12].text.strip()
-                    if "/" in cards_txt:
-                        c_part = cards_txt.split("/")[0].strip()
-                        if c_part.isdigit():
-                            cards = int(c_part)
 
                     if p_name and t_name:
-                        # チーム名表記の正規化（念のため両方やっておく）
                         norm_t = normalize_team_name(t_name)
                         player_db[p_name] = {
                             "team_raw": t_name,
@@ -295,8 +282,7 @@ def fetch_team_injuries(api_key, target_teams):
                             "goals": goals,
                             "assists": assists,
                             "games": games,
-                            "minutes": minutes,
-                            "cards": cards
+                            "minutes": minutes
                         }
         except Exception as e:
             print(f"[DEBUG] 一括パース失敗: {e}")
@@ -307,26 +293,29 @@ def fetch_team_injuries(api_key, target_teams):
         star_player_status = []
         
         for p_name, data in player_db.items():
-            # 表記ゆれ対策：生チーム名か正規化チーム名のどちらかが、対象チーム名と引っかかればOKにする
+            # 表記ゆれ対策：生チーム名か正規化チーム名の部分一致
             if (team in data["team_raw"]) or (data["team_raw"] in team) or (data["team_norm"] == norm_team):
                 
-                # 1試合あたりの平均出場時間を計算
-                avg_min = 0
-                if data["games"] > 0:
-                    avg_min = round(data["minutes"] / data["games"], 1)
-                
-                # ランキング表示：得点またはアシストが1以上、もしくは警告が溜まっている主要選手
-                if data["goals"] > 0 or data["assists"] > 0 or data["cards"] >= 3:
-                    p_info = f"{p_name}(得点:{data['goals']}/平均:{avg_min}分)"
-                    if data["assists"] > 0:
-                        p_info = f"{p_name}(得点:{data['goals']}/アシスト:{data['assists']}/平均:{avg_min}分)"
+                # 1試合あたスタッツの最低ライン（得点またはアシストが1以上）
+                if data["goals"] > 0 or data["assists"] > 0:
                     
-                    if data["cards"] >= 3:
-                        p_info += f"⚠️警告:{data['cards']}枚"
-                        
-                    # 稼働率による要警戒判定（3試合以上出ていて平均45分未満）
+                    # 【新ロジック】90分あたりの得点＋アシスト関与効率（G+A/90）
+                    # ピッチに90分間立った場合に、何点分のゴール/アシストを生み出すかの指標
+                    efficiency = 0.0
+                    if data["minutes"] > 0:
+                        efficiency = round(((data["goals"] + data["assists"]) / data["minutes"]) * 90, 2)
+                    
+                    # 1試合あたりの平均出場時間
+                    avg_min = 0
+                    if data["games"] > 0:
+                        avg_min = round(data["minutes"] / data["games"], 1)
+                    
+                    # テキスト組み立て：不確実な警告を廃止し、関与率（90分換算値）をストレートに明記
+                    p_info = f"{p_name}(得点:{data['goals']}/アシスト:{data['assists']}/関与率:{efficiency})"
+                    
+                    # 稼働率による要警戒判定（3試合以上出ていて平均45分未満＝ポテンシャルはあるがベンチ・ケガ明けリスク）
                     if data["games"] >= 3 and avg_min < 45.0:
-                        p_info = f"【要警戒】{p_name}(平均稼働:{avg_min}分)"
+                        p_info = f"【要警戒】{p_name}(平均稼働:{avg_min}分/関与率:{efficiency})"
                     
                     star_player_status.append(p_info)
 
@@ -334,7 +323,7 @@ def fetch_team_injuries(api_key, target_teams):
         if star_player_status:
             injury_summary[norm_team] = " / ".join(star_player_status)
         else:
-            injury_summary[norm_team] = "主要エースの稼働問題なし（またはランク外）"
+            injury_summary[norm_team] = "主要エースの稼働問題なし（またはデータなし）"
 
     print("--- [INFO] Yahoo!スポーツからのデータ同期が完了しました ---")
     return injury_summary
