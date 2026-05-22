@@ -377,12 +377,28 @@ def main():
         home_recent, home_interval = calculate_interval_by_data(home, schedule_map, match_date)
         away_recent, away_interval = calculate_interval_by_data(away, schedule_map, match_date)
         
-        home_injuries = injury_data.get(home_norm, "情報なし")
-        away_injuries = injury_data.get(away_norm, "情報なし")
+# データの取り出し方を辞書対応に修正
+        home_inj_data = injury_data.get(home_norm, {"text": "情報なし", "count": 0})
+        away_inj_data = injury_data.get(away_norm, {"text": "情報なし", "count": 0})
+
+        # モックモード（文字列で「なし」が入っている場合）の互換性ケア
+        if isinstance(home_inj_data, str):
+            home_injuries = home_inj_data
+            home_injuries_count = 0
+        else:
+            home_injuries = home_inj_data.get("text", "情報なし")
+            home_injuries_count = home_inj_data.get("count", 0)
+
+        if isinstance(away_inj_data, str):
+            away_injuries = away_inj_data
+            away_injuries_count = 0
+        else:
+            away_injuries = away_inj_data.get("text", "情報なし")
+            away_injuries_count = away_inj_data.get("count", 0)
         
         print(f"  [試合No.{i:02d}] 順位・状態判定:")
-        print(f"    -> ホーム: {home} ({home_rank}位) 調子:{home_recent} / 間隔:{home_interval} / 離脱:{home_injuries}")
-        print(f"    -> アウェイ: {away} ({away_rank}位) 調子:{away_recent} / 間隔:{away_interval} / 離脱:{away_injuries}")
+        print(f"    -> ホーム: {home} ({home_rank}位) 調子:{home_recent} / 間隔:{home_interval} / 離脱:{home_injuries} ({home_injuries_count}人)")
+        print(f"    -> アウェイ: {away} ({away_rank}位) 調子:{away_recent} / 間隔:{away_interval} / 離脱:{away_injuries} ({away_injuries_count}人)")
         
         match_list.append({
             "holdId": hold_id, 
@@ -396,7 +412,11 @@ def main():
             "homeInterval": home_interval, 
             "awayInterval": away_interval,
             "homeInjuries": home_injuries,
-            "awayInjuries": away_injuries
+            "awayInjuries": away_injuries,
+            
+            # ★ ここで新項目をJSONに出力します！
+            "homeInjuriesCount": home_injuries_count,
+            "awayInjuriesCount": away_injuries_count
         })
         
     with open("data.json", "w", encoding="utf-8") as f:
