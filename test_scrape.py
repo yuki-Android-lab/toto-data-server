@@ -36,49 +36,51 @@ with sync_playwright() as p:
         
         try:
             page.goto(target_url, wait_until="domcontentloaded")
-            time.sleep(2.0) # 完全に描画されるまで待機
+            time.sleep(2.0) # 完全に文字がレンダリングされるまで2秒待機
             html_content = page.content()
             soup = BeautifulSoup(html_content, 'html.parser')
             
-            # 💡 【チーム名の確実な抽出ロジック（強化版）】
-            # タイトルタグ（例:「福岡 vs 神戸 の対戦データ | totoONE」）から「vs」の前後を確実に切り分ける
+            # 💡 【チーム名の確実な抽出ロジック（最終確定版）】
+            # タイトル（固定トラップ）は無視！画面内のテキスト全体から「◯◯ vs △△」の並びをダイレクト検索
             home_team = ""
             away_team = ""
             
-            title_tag = soup.find('title')
-            if title_tag:
-                title_text = title_tag.get_text()
-                # 「vs」または「ｖｓ」で分割を試みる（前後の空白を除去）
-                match_teams = re.search(r"([^\sｖv]+)\s*(?:vs|ｖｓ)\s*([^\s対]+)", title_text, re.IGNORECASE)
-                if match_teams:
-                    home_team = match_teams.group(1).strip()
-                    # 「神戸 の対戦データ」のようになっている部分からチーム名だけを抽出
-                    away_raw = match_teams.group(2).strip()
-                    away_team = away_raw.split()[0].replace("の対戦データ", "")
+            # ページ内のすべての文字列を取得
+            page_text = soup.get_text()
             
-            # 万が一タイトルから抜けなかった場合の第2保険（H/A要素の全探索）
-            if not home_team or not away_team:
-                team_tags = soup.find_all(class_=lambda c: c and ('teamName' in c or 'team_name' in c))
-                if len(team_tags) >= 2:
-                    home_team = team_tags[0].get_text().strip()
-                    away_team = team_tags[1].get_text().strip()
+            # 「◯◯ vs △△」というパターンの文字列を正規表現で探す
+            # チーム名には英数字やカタカナ、漢字、Jリーグ特有の「F・東京」「川崎F」なども考慮
+            vs_matches = re.findall(r"([A-Za-z0-9亜-熙ぁ-んァ-ヶー・]+)\s*(?:vs|ｖｓ)\s*([A-Za-z0-9亜-熙ぁ-んァ-ヶー・]+)", page_text, re.IGNORECASE)
+            
+            valid_match = None
+            for hm, aw in vs_matches:
+                hm_s, aw_s = hm.strip(), aw.strip()
+                # サイトの共通メニューや無駄な単語（「対戦データ」「動画」など）を弾くフィルター
+                if hm_s in ["試合", "動画", "toto", "MINI", "予定", "結果", "ニュース", "データ"] or aw_s in ["試合", "動画", "データ"]:
+                    continue
+                # 「仙台 vs 横浜FC」のトラップ文字列以外の、そのページ固有の対戦カードが見つかったらそれを採用
+                valid_match = (hm_s, aw_s)
+                break
+            
+            if valid_match:
+                home_team, away_team = valid_match
+            else:
+                # 保険：もし「vs」表記が全滅していた場合、HとAのチーム名表示エリアから個別に引っこ抜く
+                # 画面内にある「◯◯の対戦データ」という見出し文から抽出を試みる
+                data_headings = re.findall(r"([A-Za-z0-9亜-熙ぁ-んァ-ヶー・]+)の対戦データ", page_text)
+                if len(data_headings) >= 2:
+                    home_team = data_headings[0].strip()
+                    away_team = data_headings[1].strip()
 
-            # 💡 【順位の確実な抽出】（実績ありのロジック）
+            # 💡 【順位の確実な抽出】
             home_rank = 10
             away_rank = 10
             
-            rank_tags = soup.find_all(class_=lambda c: c and 'rank' in c.lower())
-            if len(rank_tags) >= 2:
-                h_rank_str = re.search(r"\d+", rank_tags[0].get_text())
-                a_rank_str = re.search(r"\d+", rank_tags[1].get_text())
-                if h_rank_str: home_rank = int(h_rank_str.group())
-                if a_rank_str: away_rank = int(a_rank_str.group())
-            else:
-                text_content = soup.get_text()
-                rank_matches = re.findall(r"(\d+)位", text_content)
-                if len(rank_matches) >= 2:
-                    home_rank = int(rank_matches[0])
-                    away_rank = int(rank_matches[1])
+            # 画面全体のテキストから「〇〇位」の数字を自動抽出（最初に見つかる2つをH/A順位とする）
+            rank_matches = re.findall(r"(\d+)位", page_text)
+            if len(rank_matches) >= 2:
+                home_rank = int(rank_matches[0])
+                away_rank = int(rank_matches[1])
 
             # 💡 【リアルタイム怪我人情報の抽出】
             home_injuries = []
@@ -107,12 +109,12 @@ with sync_playwright() as p:
             h_count = len(home_injuries)
             a_count = len(away_injuries)
 
-            # 最終保険名
+            # 最終保険名（これらが残ったら未取得の証拠）
             if not home_team: home_team = f"ホーム{match_no}"
             if not away_team: away_team = f"アウェイ{match_no}"
 
             print(f"🌐 [試合No.{match_no}] {home_team}({home_rank}位) vs {away_team}({away_rank}位)")
-            print(f"  👉 離退: H {h_count}人 / A {a_count}人")
+            print(f"  👉 離脱: H {h_count}人 / A {a_count}人")
 
         except Exception as e:
             print(f"⚠️ 試合No.{match_no} でエラーが発生しました: {e}")
