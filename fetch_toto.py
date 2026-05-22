@@ -231,60 +231,112 @@ def calculate_interval_by_data(team_name, schedule_map, toto_date_str, current_y
     return recent_str, interval_str
 
 def fetch_team_injuries(api_key, target_teams):
-    print("\n================== [⚠️ DEBUG START] ==================")
-    print(f"引数のtarget_teams: {target_teams}")
+    print("\n[国内スクレイピング] Yahoo!スポーツ(SS版スタッツ)から全スタッツを一括回収中...")
+    injury_summary = {}
     
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
     
-    # テストとして「J1SSの得点ランキング」のトップ生HTMLを解析します
-    debug_url = "https://soccer.yahoo.co.jp/jleague/category/j1ss/stats?gk=249&type=1"
-    print(f"ターゲットURL: {debug_url}")
-    
-    try:
-        req = urllib.request.Request(debug_url, headers=headers)
-        with urllib.request.urlopen(req, timeout=10) as response:
-            html_content = response.read().decode('utf-8', errors='ignore')
-            soup = BeautifulSoup(html_content, 'html.parser')
-            
-            # 1. そもそも <table> タグがいくつ存在するか
-            tables = soup.find_all('table')
-            print(f"■ ページ内の合計 <table> タグ数: {len(tables)} 個")
-            
-            # 2. 最初に見つかったテーブルのヘッダーや構造を出力
-            if tables:
-                for i, tbl in enumerate(tables[:2]): # 最初の2つのテーブルを調査
-                    print(f"\n--- <table> インデックス [{i}] の構造解析 ---")
-                    print(f"クラス名(class): {tbl.get('class')}")
-                    
-                    # 最初の方の行を5行だけ抽出して中身をダンプ
-                    rows = tbl.find_all('tr')
-                    print(f"テーブル内の総行数(tr): {len(rows)} 行")
-                    
-                    for r_idx, row in enumerate(rows[:5]): # ヘッダー含め上から5行
-                        print(f"  [Row {r_idx}]")
-                        # th（ヘッダー）とtd（データ）を両方抽出
-                        cells = row.find_all(['th', 'td'])
-                        for c_idx, cell in enumerate(cells):
-                            # タグ名、クラス名、内包するaタグの有無、テキスト
-                            a_tag = cell.find('a')
-                            a_info = f", a_href: {a_tag['href']}" if a_tag else ""
-                            print(f"    col[{c_idx}] <{cell.name} class={cell.get('class')}>: Text='{cell.text.strip()}'{a_info}")
-            else:
-                print("❌ 警告: ページ内に <table> タグが1つも見つかりませんでした。")
-                # テーブルがない場合、主要なdivのクラス名を吐き出す
-                print("■ 上位の主要な <div> クラス名一覧:")
-                for div in soup.find_all('body')[0].find_all('div', class_=True)[:15]:
-                    print(f"  <div class={div.get('class')}>")
+    # 蓄積用データ構造
+    player_db = {}
 
-    except Exception as e:
-        print(f"❌ 通信または解析自体に失敗しました: {e}")
+    # 叩くURLは、すべてが網羅されているこの2つだけで完結！
+    target_urls = [
+        "https://soccer.yahoo.co.jp/jleague/category/j1ss/stats?gk=249&type=1",
+        "https://soccer.yahoo.co.jp/jleague/category/j2j3ss/stats?gk=250&type=1"
+    ]
+
+    for url in target_urls:
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=10) as response:
+                soup = BeautifulSoup(response.read().decode('utf-8', errors='ignore'), 'html.parser')
+                
+                # クラス名 'sc-tableStats' のテーブルを狙い撃ち
+                table = soup.find('table', class_='sc-tableStats') or soup.find('table')
+                if not table:
+                    continue
+                
+                for row in table.find_all('tr'):
+                    # td がない（thだけのヘッダー行）はスキップ
+                    if not row.find('td'):
+                        continue
+                        
+                    cols = row.find_all('td')
+                    if len(cols) < 13: # 警告まで含めて13列以上あることを確認
+                        continue
+                    
+                    # ログの検証結果に基づく正確な列マッピング
+                    p_name = cols[1].text.strip().replace(" ", "").replace("　", "")
+                    t_name = cols[2].text.strip()
+                    
+                    goals = int(cols[4].text.strip()) if cols[4].text.strip().isdigit() else 0
+                    assists = int(cols[6].text.strip()) if cols[6].text.strip().isdigit() else 0
+                    games = int(cols[10].text.strip()) if cols[10].text.strip().isdigit() else 0
+                    
+                    minutes_txt = cols[11].text.strip().replace(",", "")
+                    minutes = int(minutes_txt) if minutes_txt.isdigit() else 0
+                    
+                    # 警告/退場 (例: "1/0" の左側を取り出す)
+                    cards = 0
+                    cards_txt = cols[12].text.strip()
+                    if "/" in cards_txt:
+                        c_part = cards_txt.split("/")[0].strip()
+                        if c_part.isdigit():
+                            cards = int(c_part)
+
+                    if p_name and t_name:
+                        # チーム名表記の正規化（念のため両方やっておく）
+                        norm_t = normalize_team_name(t_name)
+                        player_db[p_name] = {
+                            "team_raw": t_name,
+                            "team_norm": norm_t,
+                            "goals": goals,
+                            "assists": assists,
+                            "games": games,
+                            "minutes": minutes,
+                            "cards": cards
+                        }
+        except Exception as e:
+            print(f"[DEBUG] 一括パース失敗: {e}")
+
+    # --- 各チームごとにスクレイピングデータを集計・判定 ---
+    for idx, team in enumerate(target_teams):
+        norm_team = normalize_team_name(team)
+        star_player_status = []
         
-    print("================== [⚠️ DEBUG END] ==================\n")
-    
-    # 既存の処理を止めないよう、空の辞書を返して後続処理をパスさせます
-    injury_summary = {normalize_team_name(t): "主要エースの稼働問題なし（デバッグ中）" for t in target_teams}
+        for p_name, data in player_db.items():
+            # 表記ゆれ対策：生チーム名か正規化チーム名のどちらかが、対象チーム名と引っかかればOKにする
+            if (team in data["team_raw"]) or (data["team_raw"] in team) or (data["team_norm"] == norm_team):
+                
+                # 1試合あたりの平均出場時間を計算
+                avg_min = 0
+                if data["games"] > 0:
+                    avg_min = round(data["minutes"] / data["games"], 1)
+                
+                # ランキング表示：得点またはアシストが1以上、もしくは警告が溜まっている主要選手
+                if data["goals"] > 0 or data["assists"] > 0 or data["cards"] >= 3:
+                    p_info = f"{p_name}(得点:{data['goals']}/平均:{avg_min}分)"
+                    if data["assists"] > 0:
+                        p_info = f"{p_name}(得点:{data['goals']}/アシスト:{data['assists']}/平均:{avg_min}分)"
+                    
+                    if data["cards"] >= 3:
+                        p_info += f"⚠️警告:{data['cards']}枚"
+                        
+                    # 稼働率による要警戒判定（3試合以上出ていて平均45分未満）
+                    if data["games"] >= 3 and avg_min < 45.0:
+                        p_info = f"【要警戒】{p_name}(平均稼働:{avg_min}分)"
+                    
+                    star_player_status.append(p_info)
+
+        # サマリーへの格納
+        if star_player_status:
+            injury_summary[norm_team] = " / ".join(star_player_status)
+        else:
+            injury_summary[norm_team] = "主要エースの稼働問題なし（またはランク外）"
+
+    print("--- [INFO] Yahoo!スポーツからのデータ同期が完了しました ---")
     return injury_summary
     
 def main():
