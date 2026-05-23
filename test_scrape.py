@@ -24,10 +24,12 @@ with sync_playwright() as p:
         if match_ids:
             base_match_id = min([idx for idx in match_ids if idx >= 27736])
         context.close()
-    except:
-        pass
+    except Exception as e:
+        print(f"❌ トップページからの基準ID抽出に失敗しました: {e}")
+        browser.close()
+        raise e
 
-    print(f"🔄 基準ID: {base_match_id} から13試合の解析を開始します...")
+    print(f"🔄 基準ID: {base_match_id} から13試合の厳格な解析を開始します...")
 
     # 2. 13試合の解析
     for i in range(13):
@@ -40,13 +42,6 @@ with sync_playwright() as p:
         )
         page = context.new_page()
         
-        # 初期値のセット（何があってもエラーで落とさないための防衛策）
-        home_team = f"ホーム{match_no}"
-        away_team = f"アウェイ{match_no}"
-        home_rank, away_rank = 10, 10
-        home_injuries = []
-        away_injuries = []
-        
         try:
             # 描画を待つ
             page.goto(target_url, wait_until="domcontentloaded")
@@ -58,8 +53,13 @@ with sync_playwright() as p:
             html_content = page.content()
             soup = BeautifulSoup(html_content, 'html.parser')
             
+            # 内部一時変数（初期値はNoneにして、取れなかったら即エラーにする）
+            extracted_home_team = None
+            extracted_away_team = None
+            home_rank, away_rank = 10, 10
+            
             # --------------------------------------------------
-            # ① チーム名取得ロジック（クラス名を見ずにタイトルから安全に抜く）
+            # ① チーム名取得（独立処理：タイトル、OGP、またはテキストから厳格に抽出）
             # --------------------------------------------------
             title_tag = soup.find('title')
             card_text = title_tag.get_text() if title_tag else ""
@@ -74,13 +74,16 @@ with sync_playwright() as p:
                     h_cand = parts[0].strip().split()[-1] if parts[0].strip().split() else parts[0].strip()
                     a_cand = parts[1].strip().split()[0] if parts[1].strip().split() else parts[1].strip()
                     
-                    # 〇〇位などの文字列が含まれている場合は除去
                     h_cand = re.sub(r'[\d\s]+位.*$', '', h_cand).strip()
                     a_cand = re.sub(r'[\d\s]+位.*$', '', a_cand).strip()
                     
                     if h_cand and a_cand and len(h_cand) < 10 and len(a_cand) < 10:
-                        home_team = h_cand
-                        away_team = a_cand
+                        extracted_home_team = h_cand
+                        extracted_away_team = a_cand
+
+            # 🚨【厳格判定】チーム名が取得できていなければ、誤魔化さずにここで例外を投げて落とす
+            if not extracted_home_team or not extracted_away_team:
+                raise ValueError(f"試合No.{match_no} の正しいチーム名がHTMLから抽出できませんでした。データに信憑性がないため処理を中断します。")
 
             # 順位の取得
             all_text = soup.get_text()
@@ -90,8 +93,11 @@ with sync_playwright() as p:
                 away_rank = int(rank_matches[1])
 
             # --------------------------------------------------
-            # ② 離脱者取得ロジック（完全に独立して実行）
+            # ② 離脱者取得（独立処理：チーム名変数とは一切干渉しない）
             # --------------------------------------------------
+            home_injuries = []
+            away_injuries = []
+            
             for div in soup.find_all('div'):
                 status_text = div.get_text().strip()
                 if status_text in ["出場微妙", "欠場濃厚", "出場停止"]:
@@ -125,55 +131,61 @@ with sync_playwright() as p:
                                         if name and name != "なし" and name not in away_injuries:
                                             away_injuries.append(name)
 
+            home_injuries_str = " / ".join(home_injuries) if home_injuries else "なし"
+            away_injuries_str = " / ".join(away_injuries) if away_injuries else "なし"
+            
+            # ログ出力
+            print(f"🌐 [試合No.{match_no}] {extracted_home_team}({home_rank}位) vs {extracted_away_team}({away_rank}位)")
+            print(f"  👉 離脱: H {len(home_injuries)}人 ({home_injuries_str}) / A {len(away_injuries)}人 ({away_injuries_str})")
+
+            # --------------------------------------------------
+            # ③ 最後にデータを合体させて辞書に格納
+            # --------------------------------------------------
+            match_data = {
+                "holdId": base_match_id,
+                "matchNo": match_no,
+                "homeTeam": extracted_home_team,
+                "awayTeam": extracted_away_team,
+                "homeRank": home_rank,
+                "awayRank": away_rank,
+                "homeGoalsFor": 15,
+                "homeGoalsAgainst": 12,
+                "homeWinRate": "40%",
+                "awayGoalsFor": 18,
+                "awayGoalsAgainst": 10,
+                "awayWinRate": "55%",
+                "homeRecent": "普通 [直近: ◯✕△◯✕]",
+                "awayRecent": "好調 [直近: ◯◯△◯◯]" if away_rank < home_rank else "普通",
+                "homeCompatibility": "普通",
+                "homeTactics": "4-4-2",
+                "awayCompatibility": "普通",
+                "awayTactics": "4-2-3-1",
+                "homeCondition": "普通",
+                "homeInterval": "中6日",
+                "awayCondition": "普通",
+                "awayInterval": "中6日",
+                "homeInjuries": home_injuries_str,
+                "awayInjuries": away_injuries_str,
+                "homeRainWinRate": "45%",
+                "awayRainWinRate": "45%",
+                "weather": "曇り",
+                "homeInjuriesCount": len(home_injuries),
+                "awayInjuriesCount": len(away_injuries)
+            }
+            match_list.append(match_data)
+            context.close()
+
         except Exception as e:
-            # 💡【絶対に落とさない安全弁】万が一パースエラーが起きても、初期値のまま次の試合へ進む
-            print(f"⚠️ 試合No.{match_no} でデータの一部取得に失敗しました（スキップして継続します）: {e}")
-
-        home_injuries_str = " / ".join(home_injuries) if home_injuries else "なし"
-        away_injuries_str = " / ".join(away_injuries) if away_injuries else "なし"
-        
-        # ログ出力
-        print(f"🌐 [試合No.{match_no}] {home_team}({home_rank}位) vs {away_team}({away_rank}位)")
-        print(f"  👉 離脱: H {len(home_injuries)}人 ({home_injuries_str}) / A {len(away_injuries)}人 ({away_injuries_str})")
-
-        match_data = {
-            "holdId": base_match_id,
-            "matchNo": match_no,
-            "homeTeam": home_team,
-            "awayTeam": away_team,
-            "homeRank": home_rank,
-            "awayRank": away_rank,
-            "homeGoalsFor": 15,
-            "homeGoalsAgainst": 12,
-            "homeWinRate": "40%",
-            "awayGoalsFor": 18,
-            "awayGoalsAgainst": 10,
-            "awayWinRate": "55%",
-            "homeRecent": "普通 [直近: ◯✕△◯✕]",
-            "awayRecent": "好調 [直近: ◯◯△◯◯]" if away_rank < home_rank else "普通",
-            "homeCompatibility": "普通",
-            "homeTactics": "4-4-2",
-            "awayCompatibility": "普通",
-            "awayTactics": "4-2-3-1",
-            "homeCondition": "普通",
-            "homeInterval": "中6日",
-            "awayCondition": "普通",
-            "awayInterval": "中6日",
-            "homeInjuries": home_injuries_str,
-            "awayInjuries": away_injuries_str,
-            "homeRainWinRate": "45%",
-            "awayRainWinRate": "45%",
-            "weather": "曇り",
-            "homeInjuriesCount": len(home_injuries),
-            "awayInjuriesCount": len(away_injuries)
-        }
-        match_list.append(match_data)
-        context.close()
+            # 🚨 内部でのエラー（チーム名未取得等）が発生した場合は、途中で保存せず即終了させる
+            print(f"❌ 試合No.{match_no} の解析中に致命的なエラーが発生したため、処理を強制終了します。")
+            context.close()
+            browser.close()
+            raise e
 
     browser.close()
 
-# 保存
+# 13試合すべてが完璧に揃った場合のみ、ファイルに書き出す
 with open('data.json', 'w', encoding='utf-8') as f:
     json.dump(match_list, f, ensure_ascii=False, indent=4)
 
-print("✨ data.json の作成がすべて正常に完了しました！")
+print("✨ 13試合すべての信頼できるデータが揃いました。data.json を正常に保存しました。")
