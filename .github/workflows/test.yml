@@ -18,7 +18,7 @@ jobs:
       - name: 必要なライブラリと本物ブラウザのインストール
         run: |
           python -m pip install --upgrade pip
-          pip install requests beautifulsoup4
+          pip install Playwright beautifulsoup4
           
       - name: テストスクリプトを実行
         run: |
