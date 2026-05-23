@@ -59,21 +59,38 @@ def clean_team_name(team_name: str) -> str:
 # =========================================
 def fetch_html(url: str) -> str:
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True, args=["--disable-blink-features=AutomationControlled"])
+        browser = p.chromium.launch(
+            headless=True, 
+            args=["--disable-blink-features=AutomationControlled"]
+        )
         page = browser.new_page()
         try:
+            # 1. まずページを読み込む
             page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            
+            # 2. ネットワークの通信が完全に静かになるのを待つ
             page.wait_for_load_state("networkidle", timeout=60000)
+            
+            # 3. 【ここが超重要】ローディング画面が消えるのを待つ
             try:
-                # サイトのLoadingマスクが消えるのを厳格に待つ
-                page.wait_for_selector("[class*='Loading_loadingWrapper']", state="hidden", timeout=10000)
+                page.wait_for_selector("[class*='Loading_loadingWrapper']", state="hidden", timeout=15000)
             except TimeoutError:
                 pass
+            
+            # 4. 【決定打】対戦カードが描画された「クラス要素」が画面に出現するまで厳格に待機する
+            # これを行うことで、JavaScriptによる後からの描画遅れを完全にキャッチします
+            try:
+                page.wait_for_selector("[class*='Detail_matchCard']", state="visible", timeout=15000)
+            except TimeoutError:
+                # クラス名が万が一変わっていた場合の保険として、body全体の描画を待つ
+                page.wait_for_selector("body", state="visible", timeout=15000)
+            
+            # 5. 念のためJavaScriptのレンダリング安全マージンとして2秒止める
             time.sleep(2)
+            
             return page.content()
         finally:
             browser.close()
-
 # =========================================
 # ① 基本情報解析（チーム名・順位を完璧にペアで紐付け）
 # =========================================
