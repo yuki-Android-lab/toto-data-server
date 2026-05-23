@@ -8,10 +8,9 @@ TOP_URL = "https://www.totoone.jp/"
 match_list = []
 
 with sync_playwright() as p:
-    # 毎回確実に真っ新な状態からブラウザを起動
     browser = p.chromium.launch(headless=True)
     
-    # 1. 最新の開催回の基準IDを自動抽出（動かない場合は27736を固定）
+    # 1. 最新の開催回の基準IDを自動抽出
     base_match_id = 27736 
     try:
         context = browser.new_context(
@@ -33,7 +32,7 @@ with sync_playwright() as p:
         match_no = i + 1
         target_url = f"https://www.totoone.jp/match/{base_match_id + i}"
         
-        # 💡【最重要】遷移バグを100%回避するため、1試合ごとに「新しいコンテキストとタブ」を生成して完全に隔離する
+        # 1試合ごとに完全にクリーンなタブを開く
         context = browser.new_context(
             viewport={"width": 1280, "height": 1024},
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -41,64 +40,64 @@ with sync_playwright() as p:
         page = context.new_page()
         
         try:
-            # 完全に新しいセッションとしてURLを直撃
             page.goto(target_url, wait_until="networkidle")
-            
-            # APIデータがDOMに流し込まれるまで、物理的に安全マージンとして2.5秒停止
-            time.sleep(2.5)
+            time.sleep(2.5)  # レンダリングの完全な安全マージン
             
             html_content = page.content()
             soup = BeautifulSoup(html_content, 'html.parser')
             
-            # --- ① チーム名と順位の厳密取得 ---
+            # --- ① チーム名と順位の取得（セレクターをクラス名部分一致に修正） ---
             home_team = f"ホーム{match_no}"
             away_team = f"アウェイ{match_no}"
             home_rank, away_rank = 10, 10
             
-            # 対戦カード（Detail_matchCard__）からチーム名を直接抽出
-            card_area = soup.find(class_=lambda c: c and 'Detail_matchCard__' in c)
+            # 対戦カードヘッダーのテキストをクラス部分一致で取得
+            card_area = soup.select_one('div[class*="Detail_matchCard__"]')
             if card_area:
                 card_text = card_area.get_text()
                 teams = re.findall(r"([^\s\d位勝点]+?)\s*(?:VS|ｖｓ)\s*([^\s\d位勝点キックオフ]+)", card_text)
                 if teams:
                     home_team, away_team = teams[0][0].strip(), teams[0][1].strip()
             
-            # 順位（Detail_rank__）をピンポイント取得
-            rank_elements = soup.find_all(class_=lambda c: c and 'Detail_rank__' in c)
+            # 順位をクラス部分一致でピンポイント取得
+            rank_elements = soup.select('p[class*="Detail_rank__"]')
             if len(rank_elements) >= 2:
                 h_r = re.search(r"\d+", rank_elements[0].get_text())
                 a_r = re.search(r"\d+", rank_elements[1].get_text())
                 if h_r: home_rank = int(h_r.group())
                 if a_r: away_rank = int(a_r.group())
 
-            # --- ② 離脱者（選手情報テーブル）の厳密パース ---
+            # --- ② 離脱者情報の取得（テーブル構造のCSSセレクターを厳密化） ---
             home_injuries = []
             away_injuries = []
             
-            # 「Detail_playerInfo__」を走査して離脱者を確実に回収
-            info_blocks = soup.find_all('div', class_=lambda c: c and 'Detail_playerInfo__' in c)
+            # 「Detail_playerInfo__」を含む各行を正確にループ
+            info_blocks = soup.select('div[class*="Detail_playerInfo__"]')
+            
             for block in info_blocks:
-                status_tag = block.find(class_=lambda c: c and 'Detail_memberInfo__' in c)
+                # 状態（出場微妙、欠場濃厚、出場停止）のラベルをチェック
+                status_tag = block.select_one('[class*="Detail_memberInfo__"]')
                 if not status_tag:
                     continue
                 status_text = status_tag.get_text().strip()
                 
                 if status_text in ["出場微妙", "欠場濃厚", "出場停止"]:
-                    # 左側（ホーム）の解析
-                    home_box = block.find(class_=lambda c: c and 'Detail_home__' in c)
+                    # 左側（ホーム）の離脱選手
+                    home_box = block.select_one('[class*="Detail_home__"]')
                     if home_box:
-                        for li in home_box.find_all('li'):
+                        for li in home_box.select('li'):
                             txt = li.get_text().strip()
+                            # 「ポジション 選手名」の形から名前のみを切り出す
                             p_match = re.search(r"(?:GK|DF|MF|FW)\s*([^\s（(]+)", txt)
                             if p_match:
                                 name = p_match.group(1).strip()
                                 if name and name != "なし" and name not in home_injuries:
                                     home_injuries.append(name)
                                     
-                    # 右側（アウェイ）の解析
-                    away_box = block.find(class_=lambda c: c and 'Detail_away__' in c)
+                    # 右側（アウェイ）の離脱選手
+                    away_box = block.select_one('[class*="Detail_away__"]')
                     if away_box:
-                        for li in away_box.find_all('li'):
+                        for li in away_box.select('li'):
                             txt = li.get_text().strip()
                             p_match = re.search(r"(?:GK|DF|MF|FW)\s*([^\s（(]+)", txt)
                             if p_match:
@@ -115,11 +114,12 @@ with sync_playwright() as p:
             print(f"  👉 離脱: H {h_count}人 ({home_injuries_str}) / A {a_count}人 ({away_injuries_str})")
 
         except Exception as e:
+            # 万が一エラーが起きた場合は即時ログを吐き出す
+            print(f"⚠️ 試合No.{match_no} 解析エラー: {e}")
             home_team, away_team = f"ホーム{match_no}", f"アウェイ{match_no}"
             home_injuries_str, away_injuries_str = "なし", "なし"
             home_rank, away_rank, h_count, a_count = 10, 10, 0, 0
 
-        # JSON保存用マッピング
         match_data = {
             "holdId": base_match_id,
             "matchNo": match_no,
@@ -152,8 +152,6 @@ with sync_playwright() as p:
             "awayInjuriesCount": a_count
         }
         match_list.append(match_data)
-        
-        # 💡【重要】使い終わったタブとコンテキストは即座に完全破棄してメモリを解放
         context.close()
 
     browser.close()
