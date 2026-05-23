@@ -17,7 +17,7 @@ jobs:
 
       - name: 必要なライブラリと本物ブラウザのインストール
         run: |
-          pip install playwright beautifulsoup4
+          pip install playwright beautifulsoup4 lxml
           playwright install chromium
 
       - name: テストスクリプトを実行
