@@ -39,33 +39,39 @@ with sync_playwright() as p:
         page = context.new_page()
         
         try:
-            # 💡【ここが諸悪の根源でした】
-            # domcontentloaded（殻だけ完成した瞬間）で進むのをやめ、
-            # networkidle（通信が完全に終わり、Loadingが消えて文字が描画された状態）までPlaywrightに待たせます。
-            page.goto(target_url, wait_until="networkidle")
-            
-            # 念のための確定物理待機（2秒）
-            time.sleep(2.0)
+            page.goto(target_url, wait_until="domcontentloaded")
+            try:
+                page.wait_for_selector(".Loading_loadingWrapper__KogWP", state="detached", timeout=5000)
+            except:
+                time.sleep(2.0)
             
             html_content = page.content()
             soup = BeautifulSoup(html_content, 'html.parser')
             
+            # --------------------------------------------------
+            # 【ステップ1】最初に成功していた、最もシンプルなチーム名取得
+            # --------------------------------------------------
             home_team = f"ホーム{match_no}"
             away_team = f"アウェイ{match_no}"
-            home_rank, away_rank = 10, 10
             
-            # --- ① チーム名と順位の取得（画面から素直に抜く） ---
-            vs_elem = soup.find(string=re.compile(r'(?:VS|ｖｓ|vs)'))
-            if vs_elem:
-                vs_text = vs_elem.parent.get_text().strip()
-                if "キックオフ" in vs_text:
-                    vs_text = vs_text.split("キックオフ")[0]
-                
-                parts = re.split(r'(?:VS|ｖｓ|vs)', vs_text)
+            # 画面最上部のh1やタイトル、クラス名から純粋に「〇〇 vs 〇〇」を抜き出す
+            card_text = ""
+            card_element = soup.select_one('div[class*="Detail_matchCard__"]')
+            if card_element:
+                card_text = card_element.get_text()
+            else:
+                title_tag = soup.find('title')
+                if title_tag:
+                    card_text = title_tag.get_text()
+
+            # シンプルに「vs」の前後で分割してチーム名を特定する（最初期のロジック）
+            if card_text and any(x in card_text.lower() for x in ["vs", "ｖｓ"]):
+                parts = re.split(r'(?:VS|ｖｓ|vs)', card_text)
                 if len(parts) >= 2:
                     h_cand = parts[0].strip().split()[-1] if parts[0].strip().split() else parts[0].strip()
                     a_cand = parts[1].strip().split()[0] if parts[1].strip().split() else parts[1].strip()
                     
+                    # 順位テキストなどのゴミ掃除
                     h_cand = re.sub(r'[\d\s]+位.*$', '', h_cand).strip()
                     a_cand = re.sub(r'[\d\s]+位.*$', '', a_cand).strip()
                     
@@ -74,27 +80,25 @@ with sync_playwright() as p:
                         away_team = a_cand
 
             # 順位の取得
+            home_rank, away_rank = 10, 10
             all_text = soup.get_text()
             rank_matches = re.findall(r"(\d+)\s*位", all_text)
             if len(rank_matches) >= 2:
                 home_rank = int(rank_matches[0])
                 away_rank = int(rank_matches[1])
 
-            # --- ② 離脱者情報の取得（INDEX修正後の正常ロジック） ---
+            # --------------------------------------------------
+            # 【ステップ2】独立して離脱者情報をパース（チーム名には一切干渉しない）
+            # --------------------------------------------------
             home_injuries = []
             away_injuries = []
             
             for div in soup.find_all('div'):
-                # チーム名エリアが巻き込まれないよう防衛線
-                if div.find(string=re.compile(r'(?:VS|ｖｓ|vs)')):
-                    continue
-                    
                 status_text = div.get_text().strip()
                 if status_text in ["出場微妙", "欠場濃厚", "出場停止"]:
                     parent_box = div.find_parent()
                     if parent_box:
                         tags = [t for t in parent_box.children if t.name is not None]
-                        
                         status_index = -1
                         for idx, t in enumerate(tags):
                             if t.get_text().strip() == status_text:
@@ -102,7 +106,7 @@ with sync_playwright() as p:
                                 break
                         
                         if status_index != -1:
-                            # 左側（ホーム）
+                            # ホーム側
                             for t in tags[:status_index]:
                                 for li in t.find_all('li'):
                                     txt = li.get_text().strip()
@@ -112,7 +116,7 @@ with sync_playwright() as p:
                                         if name and name != "なし" and name not in home_injuries:
                                             home_injuries.append(name)
                                             
-                            # 右側（アウェイ）
+                            # アウェイ側
                             for t in tags[status_index+1:]:
                                 for li in t.find_all('li'):
                                     txt = li.get_text().strip()
@@ -125,6 +129,9 @@ with sync_playwright() as p:
             home_injuries_str = " / ".join(home_injuries) if home_injuries else "なし"
             away_injuries_str = " / ".join(away_injuries) if away_injuries else "なし"
             
+            # --------------------------------------------------
+            # 【ステップ3】最後に合体させて出力
+            # --------------------------------------------------
             print(f"🌐 [試合No.{match_no}] {home_team}({home_rank}位) vs {away_team}({away_rank}位)")
             print(f"  👉 離脱: H {len(home_injuries)}人 ({home_injuries_str}) / A {len(away_injuries)}人 ({away_injuries_str})")
 
