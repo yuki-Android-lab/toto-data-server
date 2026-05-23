@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup
 match_ids = [27736, 27737, 27738, 27739, 27740, 27741, 27742, 27743, 27744, 27745, 27746, 27747, 27748]
 match_list = []
 
-print("🔄 [2ステップ完全分離] 13試合分のチーム名取得ループを実行後、待機を挟んでから怪我人取得ループを実行します...")
+print("🔄 [2ステップ完全分離・接続強化版] チーム名取得も展開を待ってから実行します...")
 
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True)
@@ -34,12 +34,13 @@ with sync_playwright() as p:
         away_rank = 99
         
         try:
-            # 左側の接続形式（domcontentloaded でチーム名を最優先取得）
-            page1.goto(target_url, wait_until="domcontentloaded")
+            # 【修正】domcontentloaded から networkidle に変更し、JS展開を完全に待つ
+            page1.goto(target_url, wait_until="networkidle", timeout=60000)
+            time.sleep(2) # 描画安全マージン
             html_content1 = page1.content()
             soup1 = BeautifulSoup(html_content1, "html.parser")
             
-            # WinMerge左側のチーム名・順位パース
+            # チーム名・順位パース
             teams = soup1.find_all('div', class_='team-name')
             ranks = soup1.find_all('span', class_='rank-number')
             
@@ -58,16 +59,16 @@ with sync_playwright() as p:
         finally:
             context1.close()
             
-        # まずはチーム名と順位だけの辞書を作ってリストに追加
+        # 取得した本物のチーム名・順位で器を作成
         match_item = {
             "matchNo": idx,
-            "holdId": 1512, # 開催回ID
+            "holdId": 1512,
             "homeTeam": home_team,
             "awayTeam": away_team,
             "homeRank": home_rank,
             "awayRank": away_rank,
-            "homeInjuries": "なし",  # 後で上書きするため初期化
-            "awayInjuries": "なし",  # 後で上書きするため初期化
+            "homeInjuries": "なし",
+            "awayInjuries": "なし",
             "homeInjuriesCount": 0,
             "awayInjuriesCount": 0
         }
@@ -97,13 +98,12 @@ with sync_playwright() as p:
         away_injuries = []
         
         try:
-            # 右側の接続形式（networkidle でJavaScript展開を完全に待つ）
             page2.goto(target_url, wait_until="networkidle", timeout=60000)
-            time.sleep(2) # 描画安全マージン
+            time.sleep(2)
             html_content2 = page2.content()
             soup2 = BeautifulSoup(html_content2, "html.parser")
             
-            # WinMerge右側の怪我人パースロジック
+            # 怪我人パースロジック
             for div in soup2.find_all('div'):
                 status_text = div.get_text().strip()
                 if status_text in ["出場微妙", "欠場濃厚", "出場停止"]:
@@ -145,13 +145,13 @@ with sync_playwright() as p:
         home_injuries_str = " / ".join(home_injuries) if home_injuries else "なし"
         away_injuries_str = " / ".join(away_injuries) if away_injuries else "なし"
         
-        # ステップ1で作成した13試合分のリストデータに、怪我人情報をインデックスで紐づけて追記
+        # ステップ1で作成した本物のチーム名データに対して、怪我人情報を確実にマージ
         match_list[idx - 1]["homeInjuries"] = home_injuries_str
         match_list[idx - 1]["awayInjuries"] = away_injuries_str
         match_list[idx - 1]["homeInjuriesCount"] = len(home_injuries)
         match_list[idx - 1]["awayInjuriesCount"] = len(away_injuries)
         
-        # 途中経過の確定ログ出力
+        # 確定した本物のチーム名・順位と怪我人情報をログに出力
         h_team = match_list[idx - 1]["homeTeam"]
         a_team = match_list[idx - 1]["awayTeam"]
         h_rank = match_list[idx - 1]["homeRank"]
