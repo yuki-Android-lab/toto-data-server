@@ -41,31 +41,32 @@ with sync_playwright() as p:
         try:
             page.goto(target_url, wait_until="domcontentloaded")
             
-            # ハイドレーション（データの流し込み）を確実に待つ
+            # 💡【超重要】画面上にチーム名（VSの文字）と離脱者テーブルが「描画される」まで確実に待つ
             try:
-                page.wait_for_selector("text=Loading...", state="hidden", timeout=10000)
+                page.wait_for_selector("text=vs", timeout=8000)
             except:
-                pass
+                try:
+                    page.wait_for_selector("text=VS", timeout=2000)
+                except:
+                    pass
             
             html_content = page.content()
             soup = BeautifulSoup(html_content, 'html.parser')
             
-            # --- ① チーム名と順位の取得（修正箇所） ---
             home_team = f"ホーム{match_no}"
             away_team = f"アウェイ{match_no}"
             home_rank, away_rank = 10, 10
             
-            # クラス名に「Detail_matchCard__」を含む要素から確実に対戦チームを抜く
+            # --- ① チーム名と順位の取得（クラス名部分一致で一発で射抜く） ---
             card_area = soup.select_one('div[class*="Detail_matchCard__"]')
             if card_area:
                 card_text = card_area.get_text()
-                # 「チーム名 VS チーム名」または「チーム名 ｖｓ チーム名」を判定（改行や空白を許容）
                 teams = re.findall(r"([^\s\d位勝点キックオフ]+?)\s*(?:VS|ｖｓ)\s*([^\s\d位勝点キックオフ]+)", card_text)
                 if teams:
                     home_team = teams[0][0].strip()
                     away_team = teams[0][1].strip()
             else:
-                # 保険としてテキスト全体から検索
+                # 保険用のテキスト全走査パース
                 vs_elements = soup.find_all(string=re.compile(r'(?:VS|ｖｓ)'))
                 for elem in vs_elements:
                     parent_text = elem.parent.get_text()
@@ -83,7 +84,7 @@ with sync_playwright() as p:
                 home_rank = int(rank_matches[0])
                 away_rank = int(rank_matches[1])
 
-            # --- ② 離脱者情報の取得（正常動作しているロジックを完全維持） ---
+            # --- ② 離脱者情報の取得（すでに実績のあるロジックを完全固定） ---
             home_injuries = []
             away_injuries = []
             
