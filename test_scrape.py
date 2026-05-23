@@ -7,15 +7,15 @@ from bs4 import BeautifulSoup
 TOP_URL = "https://www.totoone.jp/"
 match_list = []
 
-# J1・J2・J3 全対応チーム名辞書
+# J1・J2・J3 全対応クラブリスト（チーム名判定用）
 j_teams = [
     "札幌", "鹿島", "浦和", "柏", "FC東京", "F・東京", "東京V", "町田", "川崎F", "川崎Ｆ", 
     "横浜FM", "湘南", "新潟", "磐田", "名古屋", "京都", "G大阪", "Ｇ大阪", "C大阪", "Ｃ大阪", 
     "神戸", "広島", "福岡", "鳥栖", "仙台", "秋田", "山形", "いわき", "栃木", "群馬", 
     "横浜FC", "甲府", "清水", "藤枝", "岡山", "山口", "徳島", "愛媛", "長崎", "熊本", 
-    "大分", "鹿児島", "八戸", "岩手", "福島", "大宮", "YSCC", "YS横浜", "相模原", "沼津", 
-    "岐阜", "FC大阪", "奈良", "鳥取", "讃岐", "今治", "北九州", "宮崎", "琉球", "富山", 
-    "金沢", "松本", "長野", "枚方", "滋賀", "高知", "青森"
+    "大分", "鹿児島", "八戸", "岩手", "福島", "大宮", "YSCC", "相模原", "沼津", "岐阜", 
+    "FC大阪", "奈良", "鳥取", "讃岐", "今治", "北九州", "宮崎", "琉球", "富山", "金沢", 
+    "松本", "長野", "枚方", "滋賀", "高知", "青森"
 ]
 
 with sync_playwright() as p:
@@ -26,17 +26,18 @@ with sync_playwright() as p:
     )
     page = context.new_page()
 
-    # 1. 最新の開催回の基準IDを自動抽出
+    # 1. 基準IDの自動抽出
     base_match_id = 27736 
     try:
         page.goto(TOP_URL, wait_until="networkidle")
+        html_top = page.content()
         match_ids = [int(x) for x in re.findall(r"/match/(\d+)", html_top)]
         if match_ids:
             base_match_id = min([idx for idx in match_ids if idx >= 27736])
     except:
         pass
 
-    # 2. 13試合分を巡回
+    # 2. 13試合の解析
     for i in range(13):
         match_no = i + 1
         target_url = f"https://www.totoone.jp/match/{base_match_id + i}"
@@ -47,84 +48,124 @@ with sync_playwright() as p:
             html_content = page.content()
             soup = BeautifulSoup(html_content, 'html.parser')
             
-            # 画面全体のテキストを1行ずつ綺麗にリスト化
-            raw_lines = [line.strip() for line in soup.get_text().splitlines() if line.strip()]
-            full_text = "".join(raw_lines)
+            # --- 💡 チーム名と順位の確実な取得ルート ---
+            # ページ全体の行を配列で保持
+            all_lines = [line.strip() for line in soup.get_text().splitlines() if line.strip()]
+            full_text = "".join(all_lines)
             
-            # 💡 【チーム名の抽出】「ホームアウェイ」の直後の文字列から辞書ベースで確実に抽出
-            home_team = f"ホーム{match_no}"
-            away_team = f"アウェイ{match_no}"
+            home_team, away_team = f"ホーム{match_no}", f"アウェイ{match_no}"
             
-            team_part = re.search(r"ホームアウェイ([^\s\[]+?)(?:J\d|百年構想|\[)", full_text)
-            if team_part:
-                target_str = team_part.group(1)
-                for team in j_teams:
-                    if target_str.startswith(team):
-                        home_team = team
-                        remain_str = target_str[len(team):]
-                        for a_team in j_teams:
-                            if remain_str.startswith(a_team):
-                                away_team = a_team
-                                break
-                        break
+            # 「対象試合一覧」の並びから、この試合番号(i)に該当する対戦カードを直接狙い撃ち
+            all_cards = re.findall(r"([^\s]+?)\s*(?:VS|ｖｓ)\s*([^\s\dキックオフ]+)", full_text)
+            # ページ内の「対象試合一覧」エリア以降にある正しい13試合のローテーション配列を利用
+            valid_cards = []
+            for h, a in all_cards:
+                if any(t in h for t in j_teams) and any(t in a for t in j_teams):
+                    # 共通メニューのゴミを除外してクリーンなペアのみ抽出
+                    h_clean = next((t for t in j_teams if t in h), h)
+                    a_clean = next((t for t in j_teams if t in a), a)
+                    valid_cards.append((h_clean, a_clean))
+            
+            # 巡回インデックスから今節の正しいカードを特定
+            if len(valid_cards) >= 13:
+                home_team, away_team = valid_cards[i]
+            else:
+                # 保険：ヘッダーから抽出
+                team_part = re.search(r"ホームアウェイ([^\s\[]+?)(?:J\d|百年構想|\[)", full_text)
+                if team_part:
+                    target_str = team_part.group(1)
+                    for team in j_teams:
+                        if target_str.startswith(team):
+                            home_team = team
+                            remain_str = target_str[len(team):]
+                            for a_team in j_teams:
+                                if remain_str.startswith(a_team):
+                                    away_team = a_team
+                                    break
+                            break
 
-            # 💡 【順位の抽出】
-            home_rank = 10
-            away_rank = 10
+            # 順位の取得（EAST/WESTの文字列情報を考慮）
+            home_rank, away_rank = 10, 10
             rank_matches = re.findall(r"(?:EAST|WEST)?\s*(\d+)位", full_text)
             if len(rank_matches) >= 2:
+                # ページ上部で最初に現れる順位をH、2番目をAとする
                 home_rank = int(rank_matches[0])
                 away_rank = int(rank_matches[1])
 
-            # 💡 【離脱者情報の抽出】HTMLタグを一切信じず、テキストの並びから切り出す
-            # テキスト内に「選手情報」～「出場微妙」「欠場濃厚」「出場停止」の枠組みが文字列として必ず存在する
+
+            # --- 💡 【重要】離脱者（選手情報テーブル）の厳密パース ---
             home_injuries = []
             away_injuries = []
             
-            # 「選手情報」という行から「スコアラー」または「チーム情報」までのテキスト行を抜き出す
-            player_info_section = []
-            start_capture = False
-            for line in raw_lines:
-                if "選手情報" in line:
-                    start_capture = True
-                    continue
-                if start_capture:
-                    if "スコアラー" in line or "チーム情報" in line or "データ比較" in line:
-                        break
-                    player_info_section.append(line)
+            # スクショにある「選手情報」ヘッダーの真下にある「テーブル構造（またはそれに準ずるDIV列）」をピンポイントで捕獲
+            # 表は【左：ホーム選手 | 中央：ステータス(出場微妙/欠場濃厚/出場停止) | 右：アウェイ選手】という不動の3列レイアウト
             
-            # 抜き出した選手情報テキストから、各ステータスに属する選手をパース
-            # 例: ['DF 橋本悠（15試合・2得点）', 'FW 鶴野怜樹（2試合・0得点）', '出場微妙', ...]
-            current_status = ""
-            for item in player_info_section:
-                if "出場微妙" in item or "欠場濃厚" in item or "出場停止" in item:
-                    current_status = item
-                    continue
-                
-                # 選手名らしきパターン（ポジション＋名前）を正規表現でキャッチ
-                p_match = re.search(r"^(?:GK|DF|MF|FW)\s*([^\s（(]+)", item)
-                if p_match:
-                    player_name = p_match.group(1).strip()
-                    # ログの並び順（ホームの選手が先に出現し、後半にアウェイの選手が出現、または「なし」を挟む構造）
-                    # 確実に安全に分けるため、テキスト中の「なし」や文字列の出現順序を考慮してリストに追加
-                    if len(home_injuries) < 4 and not away_injuries: 
-                        # 福岡vs神戸のログ構造に基づき、前半に出現する選手をひとまずホーム側へ
-                        home_injuries.append(player_name)
-                    else:
-                        away_injuries.append(player_name)
-
-            # 補正：もし上記簡易判定で偏りが出る場合の、より厳密なテキストブロック分割
-            # 「選手情報」のテキストの塊を直接解析
-            full_info_str = "".join(player_info_section)
-            # ホーム側とアウェイ側の「なし」という区切り文字を利用して分割を試みる
-            parts = full_info_str.split("なし")
-            if len(parts) >= 2:
-                # 前半ブロックから選手名を抽出
-                h_names = re.findall(r"(?:GK|DF|MF|FW)\s*([^\s（(1-9]+)", parts[0])
-                # 後半ブロックから選手名を抽出
-                a_names = re.findall(r"(?:GK|DF|MF|FW)\s*([^\s（(1-9]+)", parts[1])
-                if h_names: home_injuries = [n.strip() for n in h_names if n.strip()]
-                if a_names: away_injuries = [n.strip() for n in a_names if n.strip()]
+            # ページ内の全DIVから、選手情報（Detail_playerInfo__）のブロックを走査
+            info_blocks = soup.find_all('div', class_=lambda c: c and 'Detail_playerInfo__' in c)
+            
+            if info_blocks:
+                for block in info_blocks:
+                    # 中央のステータス（出場微妙、欠場濃厚、出場停止）を取得
+                    status_tag = block.find(class_=lambda c: c and 'Detail_memberInfo__' in c)
+                    if not status_tag:
+                        continue
+                    status_text = status_tag.get_text().strip()
+                    
+                    # 対象とするのは離脱スタッツ（スコアラー等は除外）
+                    if status_text in ["出場微妙", "欠場濃厚", "出場停止"]:
+                        # 左側（ホーム）の要素を取得
+                        home_box = block.find(class_=lambda c: c and 'Detail_home__' in c)
+                        if home_box:
+                            # liタグ、またはプレーンテキストから選手名を抽出
+                            for li in home_box.find_all(['li', 'p', 'div'], recursive=True):
+                                txt = li.get_text().strip()
+                                # 「GK 新井章太（0試合・0得点）」のような文字列からポジションと名前をクリーンに抽出
+                                p_match = re.search(r"(?:GK|DF|MF|FW)\s*([^\s（(]+)", txt)
+                                if p_match:
+                                    name = p_match.group(1).strip()
+                                    if name and name != "なし" and name not in home_injuries:
+                                        home_injuries.append(name)
+                                        
+                        # 右側（アウェイ）の要素を取得
+                        away_box = block.find(class_=lambda c: c and 'Detail_away__' in c)
+                        if away_box:
+                            for li in away_box.find_all(['li', 'p', 'div'], recursive=True):
+                                txt = li.get_text().strip()
+                                p_match = re.search(r"(?:GK|DF|MF|FW)\s*([^\s（(]+)", txt)
+                                if p_match:
+                                    name = p_match.group(1).strip()
+                                    if name and name != "なし" and name not in away_injuries:
+                                        away_injuries.append(name)
+            else:
+                # 【バックアップルート】万が一HTMLクラス名が完全に死んでいる場合、all_linesのインデックスから物理スライス
+                try:
+                    start_idx = -1
+                    end_idx = -1
+                    for idx, line in enumerate(all_lines):
+                        if "選手情報" in line: start_idx = idx
+                        if "スコアラー" in line and start_idx != -1: 
+                            end_idx = idx
+                            break
+                    if start_idx != -1 and end_idx != -1:
+                        sub_section = all_lines[start_idx:end_idx]
+                        # 状態フラグでパース
+                        mode = ""
+                        for item in sub_section:
+                            if item in ["出場微妙", "欠場濃厚", "出場停止"]:
+                                mode = item
+                                continue
+                            p_match = re.search(r"^(?:GK|DF|MF|FW)\s*([^\s（(]+)", item)
+                            if p_match:
+                                p_name = p_match.group(1).strip()
+                                # 文字列の登場順と、「なし」の位置から左右を論理分割
+                                # 福岡側の選手情報テキストが「出場微妙」等の直後に最初に来る構造を利用
+                                if "なし" not in item:
+                                    if len(home_injuries) <= len(away_injuries):
+                                        home_injuries.append(p_name)
+                                    else:
+                                        away_injuries.append(p_name)
+                except:
+                    pass
 
             home_injuries_str = " / ".join(home_injuries) if home_injuries else "なし"
             away_injuries_str = " / ".join(away_injuries) if away_injuries else "なし"
@@ -139,6 +180,7 @@ with sync_playwright() as p:
             home_injuries_str, away_injuries_str = "なし", "なし"
             home_rank, away_rank, h_count, a_count = 10, 10, 0, 0
 
+        # JSONデータへの格納
         match_data = {
             "holdId": base_match_id,
             "matchNo": match_no,
