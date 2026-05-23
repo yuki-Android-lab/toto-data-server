@@ -39,13 +39,13 @@ with sync_playwright() as p:
         page = context.new_page()
         
         try:
-            page.goto(target_url, wait_until="domcontentloaded")
+            # 💡【ここが諸悪の根源でした】
+            # domcontentloaded（殻だけ完成した瞬間）で進むのをやめ、
+            # networkidle（通信が完全に終わり、Loadingが消えて文字が描画された状態）までPlaywrightに待たせます。
+            page.goto(target_url, wait_until="networkidle")
             
-            # 安全のための待機
-            try:
-                page.wait_for_selector(".Loading_loadingWrapper__KogWP", state="detached", timeout=5000)
-            except:
-                time.sleep(2.0)
+            # 念のための確定物理待機（2秒）
+            time.sleep(2.0)
             
             html_content = page.content()
             soup = BeautifulSoup(html_content, 'html.parser')
@@ -54,8 +54,7 @@ with sync_playwright() as p:
             away_team = f"アウェイ{match_no}"
             home_rank, away_rank = 10, 10
             
-            # --- ① チーム名の取得（干渉を排除し、最優先でクリーンに抽出） ---
-            # ページの一番最初に見つかる「VS / ｖｓ / vs」を持つ要素の親から、純粋に対戦カードを分割
+            # --- ① チーム名と順位の取得（画面から素直に抜く） ---
             vs_elem = soup.find(string=re.compile(r'(?:VS|ｖｓ|vs)'))
             if vs_elem:
                 vs_text = vs_elem.parent.get_text().strip()
@@ -64,11 +63,9 @@ with sync_playwright() as p:
                 
                 parts = re.split(r'(?:VS|ｖｓ|vs)', vs_text)
                 if len(parts) >= 2:
-                    # 前後の不要な空白や、直前のテキストの末尾単語を抽出
                     h_cand = parts[0].strip().split()[-1] if parts[0].strip().split() else parts[0].strip()
                     a_cand = parts[1].strip().split()[0] if parts[1].strip().split() else parts[1].strip()
                     
-                    # 〇〇位 などの文字列が含まれている場合はカット
                     h_cand = re.sub(r'[\d\s]+位.*$', '', h_cand).strip()
                     a_cand = re.sub(r'[\d\s]+位.*$', '', a_cand).strip()
                     
@@ -83,14 +80,12 @@ with sync_playwright() as p:
                 home_rank = int(rank_matches[0])
                 away_rank = int(rank_matches[1])
 
-            # --- ② 離脱者情報の取得（チーム名領域を絶対に汚さないよう隔離） ---
+            # --- ② 離脱者情報の取得（INDEX修正後の正常ロジック） ---
             home_injuries = []
             away_injuries = []
             
-            # チーム名枠（Detail_matchCard__）の外側にある離脱者エリア、または下部のdivに限定してパース
-            # 判定条件に「Li要素（選手リスト）を持つ親であること」を追加し、上部のヘッダーやチーム名divを完全除外
             for div in soup.find_all('div'):
-                # チーム名が書いてある上部エリアのdiv（VSを含むような場所）は、離脱者パース処理から絶対にスキップ
+                # チーム名エリアが巻き込まれないよう防衛線
                 if div.find(string=re.compile(r'(?:VS|ｖｓ|vs)')):
                     continue
                     
