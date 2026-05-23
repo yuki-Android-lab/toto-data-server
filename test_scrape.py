@@ -9,6 +9,7 @@ match_list = []
 
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True)
+    # 完全にクリーンなセッションを毎回維持するためコンテキストを生成
     context = browser.new_context(
         viewport={"width": 1280, "height": 1024},
         user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -32,37 +33,38 @@ with sync_playwright() as p:
         target_url = f"https://www.totoone.jp/match/{base_match_id + i}"
         
         try:
+            # ページ遷移。domcontentloadedで即座に制御を戻す
             page.goto(target_url, wait_until="domcontentloaded")
             
-            # 💡 【超重要】画面が「完全にその試合のデータに切り替わる」のを物理的に監視
-            # スクショにある黒ヘッダー「選手情報」の文字が画面に出現するまで、ブラウザを強制的に待機させます
+            # 💡 【SPAトラップ完全打破】ブラウザのURLが目的のURLに切り替わるのを厳密に待機
+            page.wait_for_url(target_url, timeout=5000)
+            
+            # 💡 【レンダリング完全同期】「選手情報」という文字を含む、個別ページ特有のコンポーネントが物理的に出現するまで強制同期
+            # タイムアウトした場合は、古いキャッシュを掴まないよう追加で強制待機をかけます
             try:
-                page.get_by_text("選手情報").wait_for(state="visible", timeout=8000)
+                page.wait_for_selector("text=選手情報", state="visible", timeout=5000)
             except:
-                pass
+                time.sleep(2.5) # フォールバック：非同期ロードが遅い場合のための物理安全マージン
             
-            # 念のため、データが流し込まれるわずかなタイムラグとして1秒だけ追加固定待機
-            time.sleep(1.0)
-            
+            # 完全に描画が完了した本物のHTMLを回収
             html_content = page.content()
             soup = BeautifulSoup(html_content, 'html.parser')
             
             # --- ① チーム名と順位の厳密取得 ---
-            # 画面上部のメインヘッダー（Detail_matchCard__周辺）から現在の本物のカードを直接抜く
             home_team = f"ホーム{match_no}"
             away_team = f"アウェイ{match_no}"
             home_rank, away_rank = 10, 10
             
-            # 対戦ヘッダーのテキストを回収
+            # 対戦カードのメインエリア（Detail_matchCard__）を解析
             card_area = soup.find(class_=lambda c: c and 'Detail_matchCard__' in c)
             if card_area:
                 card_text = card_area.get_text()
-                # チーム名らしき文字列を抽出（「福岡VS神戸」などの形を検知）
+                # チーム名（◯◯VS◯◯）を抽出
                 teams = re.findall(r"([^\s\d位勝点]+?)\s*(?:VS|ｖｓ)\s*([^\s\d位勝点キックオフ]+)", card_text)
                 if teams:
                     home_team, away_team = teams[0][0].strip(), teams[0][1].strip()
             
-            # 順位部分（Detail_rank__）を個別ピンポイント取得
+            # 順位（Detail_rank__）を個別ピンポイント取得
             rank_elements = soup.find_all(class_=lambda c: c and 'Detail_rank__' in c)
             if len(rank_elements) >= 2:
                 h_r = re.search(r"\d+", rank_elements[0].get_text())
@@ -74,7 +76,7 @@ with sync_playwright() as p:
             home_injuries = []
             away_injuries = []
             
-            # 「Detail_playerInfo__」クラスを持つ各ステータス行（出場微妙・欠場濃厚・出場停止）を完全ループ
+            # クラス名「Detail_playerInfo__」を走査
             info_blocks = soup.find_all('div', class_=lambda c: c and 'Detail_playerInfo__' in c)
             
             for block in info_blocks:
@@ -83,9 +85,9 @@ with sync_playwright() as p:
                     continue
                 status_text = status_tag.get_text().strip()
                 
-                # 離脱情報のみを対象とする
+                # 「出場微妙」「欠場濃厚」「出場停止」の枠のみをターゲットにする
                 if status_text in ["出場微妙", "欠場濃厚", "出場停止"]:
-                    # 左側（ホーム）の解析
+                    # 左側（ホームチーム）の離脱者リスト
                     home_box = block.find(class_=lambda c: c and 'Detail_home__' in c)
                     if home_box:
                         for li in home_box.find_all('li'):
@@ -96,7 +98,7 @@ with sync_playwright() as p:
                                 if name and name != "なし" and name not in home_injuries:
                                     home_injuries.append(name)
                                     
-                    # 右側（アウェイ）の解析
+                    # 右側（アウェイチーム）の離脱者リスト
                     away_box = block.find(class_=lambda c: c and 'Detail_away__' in c)
                     if away_box:
                         for li in away_box.find_all('li'):
@@ -120,7 +122,7 @@ with sync_playwright() as p:
             home_injuries_str, away_injuries_str = "なし", "なし"
             home_rank, away_rank, h_count, a_count = 10, 10, 0, 0
 
-        # アプリ転送用JSONマッピング
+        # JSON保存用マッピング
         match_data = {
             "holdId": base_match_id,
             "matchNo": match_no,
