@@ -39,13 +39,13 @@ with sync_playwright() as p:
         page = context.new_page()
         
         try:
-            page.goto(target_url, wait_until="networkidle")
+            page.goto(target_url, wait_until="domcontentloaded")
             
-            # 💡【超重要】データが画面に流し込まれ、「Loading...」が消えるのを厳密に待つ
+            # Loadingが消えるのを待つ（実績のある安全処理）
             try:
-                page.wait_for_selector(".Loading_loadingWrapper__KogWP", state="detached", timeout=10000)
+                page.wait_for_selector(".Loading_loadingWrapper__KogWP", state="detached", timeout=5000)
             except:
-                time.sleep(3.0) # タイムアウト時の安全保険
+                time.sleep(2.0)
             
             html_content = page.content()
             soup = BeautifulSoup(html_content, 'html.parser')
@@ -54,21 +54,32 @@ with sync_playwright() as p:
             away_team = f"アウェイ{match_no}"
             home_rank, away_rank = 10, 10
             
-            # --- ① チーム名と順位の取得 ---
-            # クラス名に「matchCard」を含む、またはその周辺のテキストから確実にチーム名を抜く
-            card_area = soup.select_one('div[class*="matchCard"]')
-            if not card_area:
-                card_area = soup.select_one('main') # なければメイン領域全体から探す
+            # --- ① チーム名と順位の取得（一番最初に出せていた頃の確実な方法へ復元） ---
+            # 「VS」や「ｖｓ」をキーワードにして、その前後をシンプルに分割して取得する
+            vs_elements = soup.find_all(string=re.compile(r'(?:VS|ｖｓ|vs)'))
+            for elem in vs_elements:
+                parent_text = elem.parent.get_text().strip()
                 
-            if card_area:
-                card_text = card_area.get_text()
-                # チーム名 vs チーム名（英数字・漢字・カタカナ・記号、かつ特定の不要文字を除く）のパターンを抽出
-                teams = re.findall(r"([^\s\d位勝点キックオフ]+?)\s*(?:VS|ｖｓ|vs)\s*([^\s\d位勝点キックオフ]+)", card_text)
-                if teams:
-                    home_team = teams[0][0].strip()
-                    away_team = teams[0][1].strip()
+                # 不要なキックオフ情報などを排除
+                if "キックオフ" in parent_text:
+                    parent_text = parent_text.split("キックオフ")[0]
+                
+                # VSの前後で分割
+                parts = re.split(r'(?:VS|ｖｓ|vs)', parent_text)
+                if len(parts) >= 2:
+                    h_cand = parts[0].strip().split()[-1] if parts[0].strip().split() else parts[0].strip()
+                    a_cand = parts[1].strip().split()[0] if parts[1].strip().split() else parts[1].strip()
+                    
+                    # 順位等の余計な文字をクレンジング
+                    h_cand = re.sub(r'[\d\s]+位.*$', '', h_cand).strip()
+                    a_cand = re.sub(r'[\d\s]+位.*$', '', a_cand).strip()
+                    
+                    if h_cand and a_cand and len(h_cand) < 10 and len(a_cand) < 10:
+                        home_team = h_cand
+                        away_team = a_cand
+                        break
             
-            # 順位の取得
+            # 順位の取得（現在も正常に動いているロジック）
             all_text = soup.get_text()
             rank_matches = re.findall(r"(\d+)\s*位", all_text)
             if len(rank_matches) >= 2:
