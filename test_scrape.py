@@ -40,15 +40,7 @@ with sync_playwright() as p:
         
         try:
             page.goto(target_url, wait_until="domcontentloaded")
-            
-            # 💡【超重要】画面上にチーム名（VSの文字）と離脱者テーブルが「描画される」まで確実に待つ
-            try:
-                page.wait_for_selector("text=vs", timeout=8000)
-            except:
-                try:
-                    page.wait_for_selector("text=VS", timeout=2000)
-                except:
-                    pass
+            time.sleep(3.0) # ハイドレーションのための安全マージン
             
             html_content = page.content()
             soup = BeautifulSoup(html_content, 'html.parser')
@@ -57,26 +49,25 @@ with sync_playwright() as p:
             away_team = f"アウェイ{match_no}"
             home_rank, away_rank = 10, 10
             
-            # --- ① チーム名と順位の取得（クラス名部分一致で一発で射抜く） ---
-            card_area = soup.select_one('div[class*="Detail_matchCard__"]')
-            if card_area:
-                card_text = card_area.get_text()
-                teams = re.findall(r"([^\s\d位勝点キックオフ]+?)\s*(?:VS|ｖｓ)\s*([^\s\d位勝点キックオフ]+)", card_text)
+            # --- ① チーム名と順位の取得（JSONおよびタイトルから確実に抽出） ---
+            # 保険1: タイトルタグから「〇〇 vs 〇〇」を抽出 (例: 「鹿島 vs 新潟 | totoONE」)
+            title_tag = soup.find('title')
+            if title_tag:
+                title_text = title_tag.get_text()
+                teams = re.findall(r"([^\s\d位勝点キックオフ|]+?)\s*(?:VS|ｖｓ|vs)\s*([^\s\d位勝点キックオフ|]+)", title_text)
                 if teams:
                     home_team = teams[0][0].strip()
                     away_team = teams[0][1].strip()
-            else:
-                # 保険用のテキスト全走査パース
-                vs_elements = soup.find_all(string=re.compile(r'(?:VS|ｖｓ)'))
-                for elem in vs_elements:
-                    parent_text = elem.parent.get_text()
-                    teams = re.findall(r"([^\s\d位勝点キックオフ]+?)\s*(?:VS|ｖｓ)\s*([^\s\d位勝点キックオフ]+)", parent_text)
-                    if teams:
-                        if len(teams[0][0].strip()) < 10:
-                            home_team = teams[0][0].strip()
-                            away_team = teams[0][1].strip()
-                            break
             
+            # 保険2: タイトルで取れなかった場合は、OGPタグから抽出
+            if home_team == f"ホーム{match_no}":
+                og_title = soup.find('meta', property='og:title')
+                if og_title and og_title.get('content'):
+                    teams = re.findall(r"([^\s\d位勝点キックオフ|]+?)\s*(?:VS|ｖｓ|vs)\s*([^\s\d位勝点キックオフ|]+)", og_title.get('content'))
+                    if teams:
+                        home_team = teams[0][0].strip()
+                        away_team = teams[0][1].strip()
+
             # 順位の取得
             all_text = soup.get_text()
             rank_matches = re.findall(r"(\d+)\s*位", all_text)
@@ -84,7 +75,7 @@ with sync_playwright() as p:
                 home_rank = int(rank_matches[0])
                 away_rank = int(rank_matches[1])
 
-            # --- ② 離脱者情報の取得（すでに実績のあるロジックを完全固定） ---
+            # --- ② 離脱者情報の取得（正常動作しているロジックを完全維持） ---
             home_injuries = []
             away_injuries = []
             
