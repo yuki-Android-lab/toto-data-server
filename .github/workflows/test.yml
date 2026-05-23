@@ -21,6 +21,15 @@ jobs:
           pip install Playwright beautifulsoup4
           npx playwright install --with-deps chromium
           
-      - name: テストスクリプトを実行
+      # ⬇️ ここから書き換え・挿入したステップです ⬇️
+      - name: 1. チーム名・順位の取得を実行
+        run: |
+          python teamRank.py
+
+      - name: 2. 3秒間待機（安全マージン）
+        run: |
+          sleep 3
+
+      - name: 3. 怪我人情報の追記を実行
         run: |
           python test_scrape.py
