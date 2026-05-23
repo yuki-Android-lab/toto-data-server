@@ -41,34 +41,40 @@ with sync_playwright() as p:
         try:
             page.goto(target_url, wait_until="domcontentloaded")
             
-            # 💡【超重要】画面から「Loading...」の文字が完全に消えるまで強制待機
-            # これにより、裏でのデータ読み込みと画面描画の完了を完璧に待ちます
+            # ハイドレーション（データの流し込み）を確実に待つ
             try:
                 page.wait_for_selector("text=Loading...", state="hidden", timeout=10000)
             except:
                 pass
             
-            # データが描画された後の「本物のHTML」を取得
             html_content = page.content()
             soup = BeautifulSoup(html_content, 'html.parser')
             
-            # --- ① チーム名と順位の取得（PC版・スマホ版両対応） ---
+            # --- ① チーム名と順位の取得（修正箇所） ---
             home_team = f"ホーム{match_no}"
             away_team = f"アウェイ{match_no}"
             home_rank, away_rank = 10, 10
             
-            # 「VS」の文字を含む要素を全走査してチーム名を特定
-            vs_elements = soup.find_all(string=re.compile(r'(?:VS|ｖｓ)'))
-            for elem in vs_elements:
-                parent_text = elem.parent.get_text()
-                teams = re.findall(r"([^\s\d位勝点]+?)\s*(?:VS|ｖｓ)\s*([^\s\d位勝点キックオフ]+)", parent_text)
+            # クラス名に「Detail_matchCard__」を含む要素から確実に対戦チームを抜く
+            card_area = soup.select_one('div[class*="Detail_matchCard__"]')
+            if card_area:
+                card_text = card_area.get_text()
+                # 「チーム名 VS チーム名」または「チーム名 ｖｓ チーム名」を判定（改行や空白を許容）
+                teams = re.findall(r"([^\s\d位勝点キックオフ]+?)\s*(?:VS|ｖｓ)\s*([^\s\d位勝点キックオフ]+)", card_text)
                 if teams:
-                    h_candidate = teams[0][0].strip()
-                    a_candidate = teams[0][1].strip()
-                    if h_candidate and a_candidate and len(h_candidate) < 10:
-                        home_team = h_candidate
-                        away_team = a_candidate
-                        break
+                    home_team = teams[0][0].strip()
+                    away_team = teams[0][1].strip()
+            else:
+                # 保険としてテキスト全体から検索
+                vs_elements = soup.find_all(string=re.compile(r'(?:VS|ｖｓ)'))
+                for elem in vs_elements:
+                    parent_text = elem.parent.get_text()
+                    teams = re.findall(r"([^\s\d位勝点キックオフ]+?)\s*(?:VS|ｖｓ)\s*([^\s\d位勝点キックオフ]+)", parent_text)
+                    if teams:
+                        if len(teams[0][0].strip()) < 10:
+                            home_team = teams[0][0].strip()
+                            away_team = teams[0][1].strip()
+                            break
             
             # 順位の取得
             all_text = soup.get_text()
@@ -77,11 +83,10 @@ with sync_playwright() as p:
                 home_rank = int(rank_matches[0])
                 away_rank = int(rank_matches[1])
 
-            # --- ② 離脱者情報の取得 ---
+            # --- ② 離脱者情報の取得（正常動作しているロジックを完全維持） ---
             home_injuries = []
             away_injuries = []
             
-            # 「出場微妙」「欠場濃厚」「出場停止」の各行をパース
             for div in soup.find_all('div'):
                 status_text = div.get_text().strip()
                 if status_text in ["出場微妙", "欠場濃厚", "出場停止"]:
@@ -96,7 +101,6 @@ with sync_playwright() as p:
                                 break
                         
                         if status_index != -1:
-                            # 左側（ホーム）の離脱選手
                             for t in tags[:status_index]:
                                 for li in t.find_all('li'):
                                     txt = li.get_text().strip()
@@ -106,7 +110,6 @@ with sync_playwright() as p:
                                         if name and name != "なし" and name not in home_injuries:
                                             home_injuries.append(name)
                                             
-                            # 右側（アウェイ）の離脱選手
                             for t in tags[status_index+1:]:
                                 for li in t.find_all('li'):
                                     txt = li.get_text().strip()
@@ -123,7 +126,6 @@ with sync_playwright() as p:
             print(f"  👉 離脱: H {len(home_injuries)}人 ({home_injuries_str}) / A {len(away_injuries)}人 ({away_injuries_str})")
 
         except Exception as e:
-            # 万が一の保険。通常は通りません
             home_team, away_team = f"ホーム{match_no}", f"アウェイ{match_no}"
             home_injuries_str, away_injuries_str = "なし", "なし"
             home_rank, away_rank = 10, 10
