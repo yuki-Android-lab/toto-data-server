@@ -41,7 +41,7 @@ with sync_playwright() as p:
         try:
             page.goto(target_url, wait_until="domcontentloaded")
             
-            # Loadingが消えるのを待つ（実績のある安全処理）
+            # 安全のための待機
             try:
                 page.wait_for_selector(".Loading_loadingWrapper__KogWP", state="detached", timeout=5000)
             except:
@@ -54,43 +54,46 @@ with sync_playwright() as p:
             away_team = f"アウェイ{match_no}"
             home_rank, away_rank = 10, 10
             
-            # --- ① チーム名と順位の取得（一番最初に出せていた頃の確実な方法へ復元） ---
-            # 「VS」や「ｖｓ」をキーワードにして、その前後をシンプルに分割して取得する
-            vs_elements = soup.find_all(string=re.compile(r'(?:VS|ｖｓ|vs)'))
-            for elem in vs_elements:
-                parent_text = elem.parent.get_text().strip()
+            # --- ① チーム名の取得（干渉を排除し、最優先でクリーンに抽出） ---
+            # ページの一番最初に見つかる「VS / ｖｓ / vs」を持つ要素の親から、純粋に対戦カードを分割
+            vs_elem = soup.find(string=re.compile(r'(?:VS|ｖｓ|vs)'))
+            if vs_elem:
+                vs_text = vs_elem.parent.get_text().strip()
+                if "キックオフ" in vs_text:
+                    vs_text = vs_text.split("キックオフ")[0]
                 
-                # 不要なキックオフ情報などを排除
-                if "キックオフ" in parent_text:
-                    parent_text = parent_text.split("キックオフ")[0]
-                
-                # VSの前後で分割
-                parts = re.split(r'(?:VS|ｖｓ|vs)', parent_text)
+                parts = re.split(r'(?:VS|ｖｓ|vs)', vs_text)
                 if len(parts) >= 2:
+                    # 前後の不要な空白や、直前のテキストの末尾単語を抽出
                     h_cand = parts[0].strip().split()[-1] if parts[0].strip().split() else parts[0].strip()
                     a_cand = parts[1].strip().split()[0] if parts[1].strip().split() else parts[1].strip()
                     
-                    # 順位等の余計な文字をクレンジング
+                    # 〇〇位 などの文字列が含まれている場合はカット
                     h_cand = re.sub(r'[\d\s]+位.*$', '', h_cand).strip()
                     a_cand = re.sub(r'[\d\s]+位.*$', '', a_cand).strip()
                     
                     if h_cand and a_cand and len(h_cand) < 10 and len(a_cand) < 10:
                         home_team = h_cand
                         away_team = a_cand
-                        break
-            
-            # 順位の取得（現在も正常に動いているロジック）
+
+            # 順位の取得
             all_text = soup.get_text()
             rank_matches = re.findall(r"(\d+)\s*位", all_text)
             if len(rank_matches) >= 2:
                 home_rank = int(rank_matches[0])
                 away_rank = int(rank_matches[1])
 
-            # --- ② 離脱者情報の取得（正常動作しているロジックを完全維持） ---
+            # --- ② 離脱者情報の取得（チーム名領域を絶対に汚さないよう隔離） ---
             home_injuries = []
             away_injuries = []
             
+            # チーム名枠（Detail_matchCard__）の外側にある離脱者エリア、または下部のdivに限定してパース
+            # 判定条件に「Li要素（選手リスト）を持つ親であること」を追加し、上部のヘッダーやチーム名divを完全除外
             for div in soup.find_all('div'):
+                # チーム名が書いてある上部エリアのdiv（VSを含むような場所）は、離脱者パース処理から絶対にスキップ
+                if div.find(string=re.compile(r'(?:VS|ｖｓ|vs)')):
+                    continue
+                    
                 status_text = div.get_text().strip()
                 if status_text in ["出場微妙", "欠場濃厚", "出場停止"]:
                     parent_box = div.find_parent()
@@ -104,6 +107,7 @@ with sync_playwright() as p:
                                 break
                         
                         if status_index != -1:
+                            # 左側（ホーム）
                             for t in tags[:status_index]:
                                 for li in t.find_all('li'):
                                     txt = li.get_text().strip()
@@ -113,6 +117,7 @@ with sync_playwright() as p:
                                         if name and name != "なし" and name not in home_injuries:
                                             home_injuries.append(name)
                                             
+                            # 右側（アウェイ）
                             for t in tags[status_index+1:]:
                                 for li in t.find_all('li'):
                                     txt = li.get_text().strip()
