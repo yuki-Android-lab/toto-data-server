@@ -212,7 +212,7 @@ if __name__ == "__main__":
     time.sleep(3)
     
     # 3. 右側()
-    final_data_list = fetch_injuries(base_data_list)
+    # final_data_list = fetch_injuries(base_data_list)
     
     # -------------------------------------------------------------
     # 成果物の保存
