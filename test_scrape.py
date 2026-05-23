@@ -7,10 +7,10 @@ from bs4 import BeautifulSoup
 
 print("2️⃣ [test_scrape.py] 既存の data.json に怪我人情報を追記します...")
 
-# 1. 基準となる試合IDを自動抽出する前処理（元コードのまま）
 TOP_URL = "https://www.totoone.jp/"
 match_ids = []
 
+# 1. トップページから13試合分のIDを取得
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True)
     try:
@@ -27,7 +27,7 @@ with sync_playwright() as p:
         print(f"⚠️ TOPページからのID抽出に失敗しました: {e}")
     browser.close()
 
-# ID抽出に失敗した場合のフォールバック用
+# 万が一のフォールバック用
 if not match_ids:
     match_ids = [27736, 27737, 27738, 27739, 27740, 27741, 27742, 27743, 27744, 27745, 27746, 27747, 27748]
 
@@ -43,10 +43,9 @@ with open('data.json', 'r', encoding='utf-8') as f:
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True)
     
-    for match_data in match_list:
+    for i, match_data in enumerate(match_list):
         match_no = match_data["matchNo"]
-        # 現在のループに対応する実際の試合IDを割り当て
-        m_id = match_ids[match_no - 1] if match_no <= len(match_ids) else match_ids[0] + (match_no - 1)
+        m_id = match_ids[i]
         
         target_url = f"https://www.totoone.jp/match/{m_id}"
         print(f"✈️ 解析中 (試合No.{match_no}): {target_url}")
@@ -104,7 +103,7 @@ with sync_playwright() as p:
         finally:
             context.close()
 
-        # 読み込んでいた既存の match_data に怪我人情報をそのまま上書き
+        # 既存データへの上書きマージ
         home_injuries_str = " / ".join(home_injuries) if home_injuries else "なし"
         away_injuries_str = " / ".join(away_injuries) if away_injuries else "なし"
         
@@ -113,13 +112,14 @@ with sync_playwright() as p:
         match_data["homeInjuriesCount"] = len(home_injuries)
         match_data["awayInjuriesCount"] = len(away_injuries)
         
+        # 【修正】ログ出力部分に選手名（_str）を表示するように戻しました
         print(f"   📊 確定 -> {match_data['homeTeam']} vs {match_data['awayTeam']}")
-        print(f"   🚨 離脱 -> H:{len(home_injuries)}人 / A:{len(away_injuries)}人")
+        print(f"   🚨 離脱 -> H:{len(home_injuries)}人 ({home_injuries_str}) / A:{len(away_injuries)}人 ({away_injuries_str})")
         
     browser.close()
 
-# 最終的なデータをdata.jsonへ上書き保存
+# 最終保存
 with open('data.json', 'w', encoding='utf-8') as f:
     json.dump(match_list, f, ensure_ascii=False, indent=4)
 
-print("💾 [test_scrape.py] 怪我人情報を追記して data.json を最終保存しました！")
+print("💾 [test_scrape.py] 正しい順序のまま怪我人情報を追記し、data.json を最終保存しました！")
