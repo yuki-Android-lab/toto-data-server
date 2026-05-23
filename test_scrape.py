@@ -8,22 +8,23 @@ TOP_URL = "https://www.totoone.jp/"
 match_list = []
 
 with sync_playwright() as p:
+    # 毎回確実に真っ新な状態からブラウザを起動
     browser = p.chromium.launch(headless=True)
-    # 完全にクリーンなセッションを毎回維持するためコンテキストを生成
-    context = browser.new_context(
-        viewport={"width": 1280, "height": 1024},
-        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    )
-    page = context.new_page()
-
-    # 1. 基準IDの自動抽出
+    
+    # 1. 最新の開催回の基準IDを自動抽出（動かない場合は27736を固定）
     base_match_id = 27736 
     try:
-        page.goto(TOP_URL, wait_until="networkidle")
-        html_top = page.content()
+        context = browser.new_context(
+            viewport={"width": 1280, "height": 1024},
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        )
+        init_page = context.new_page()
+        init_page.goto(TOP_URL, wait_until="networkidle")
+        html_top = init_page.content()
         match_ids = [int(x) for x in re.findall(r"/match/(\d+)", html_top)]
         if match_ids:
             base_match_id = min([idx for idx in match_ids if idx >= 27736])
+        context.close()
     except:
         pass
 
@@ -32,21 +33,20 @@ with sync_playwright() as p:
         match_no = i + 1
         target_url = f"https://www.totoone.jp/match/{base_match_id + i}"
         
+        # 💡【最重要】遷移バグを100%回避するため、1試合ごとに「新しいコンテキストとタブ」を生成して完全に隔離する
+        context = browser.new_context(
+            viewport={"width": 1280, "height": 1024},
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        )
+        page = context.new_page()
+        
         try:
-            # ページ遷移。domcontentloadedで即座に制御を戻す
-            page.goto(target_url, wait_until="domcontentloaded")
+            # 完全に新しいセッションとしてURLを直撃
+            page.goto(target_url, wait_until="networkidle")
             
-            # 💡 【SPAトラップ完全打破】ブラウザのURLが目的のURLに切り替わるのを厳密に待機
-            page.wait_for_url(target_url, timeout=5000)
+            # APIデータがDOMに流し込まれるまで、物理的に安全マージンとして2.5秒停止
+            time.sleep(2.5)
             
-            # 💡 【レンダリング完全同期】「選手情報」という文字を含む、個別ページ特有のコンポーネントが物理的に出現するまで強制同期
-            # タイムアウトした場合は、古いキャッシュを掴まないよう追加で強制待機をかけます
-            try:
-                page.wait_for_selector("text=選手情報", state="visible", timeout=5000)
-            except:
-                time.sleep(2.5) # フォールバック：非同期ロードが遅い場合のための物理安全マージン
-            
-            # 完全に描画が完了した本物のHTMLを回収
             html_content = page.content()
             soup = BeautifulSoup(html_content, 'html.parser')
             
@@ -55,16 +55,15 @@ with sync_playwright() as p:
             away_team = f"アウェイ{match_no}"
             home_rank, away_rank = 10, 10
             
-            # 対戦カードのメインエリア（Detail_matchCard__）を解析
+            # 対戦カード（Detail_matchCard__）からチーム名を直接抽出
             card_area = soup.find(class_=lambda c: c and 'Detail_matchCard__' in c)
             if card_area:
                 card_text = card_area.get_text()
-                # チーム名（◯◯VS◯◯）を抽出
                 teams = re.findall(r"([^\s\d位勝点]+?)\s*(?:VS|ｖｓ)\s*([^\s\d位勝点キックオフ]+)", card_text)
                 if teams:
                     home_team, away_team = teams[0][0].strip(), teams[0][1].strip()
             
-            # 順位（Detail_rank__）を個別ピンポイント取得
+            # 順位（Detail_rank__）をピンポイント取得
             rank_elements = soup.find_all(class_=lambda c: c and 'Detail_rank__' in c)
             if len(rank_elements) >= 2:
                 h_r = re.search(r"\d+", rank_elements[0].get_text())
@@ -76,18 +75,16 @@ with sync_playwright() as p:
             home_injuries = []
             away_injuries = []
             
-            # クラス名「Detail_playerInfo__」を走査
+            # 「Detail_playerInfo__」を走査して離脱者を確実に回収
             info_blocks = soup.find_all('div', class_=lambda c: c and 'Detail_playerInfo__' in c)
-            
             for block in info_blocks:
                 status_tag = block.find(class_=lambda c: c and 'Detail_memberInfo__' in c)
                 if not status_tag:
                     continue
                 status_text = status_tag.get_text().strip()
                 
-                # 「出場微妙」「欠場濃厚」「出場停止」の枠のみをターゲットにする
                 if status_text in ["出場微妙", "欠場濃厚", "出場停止"]:
-                    # 左側（ホームチーム）の離脱者リスト
+                    # 左側（ホーム）の解析
                     home_box = block.find(class_=lambda c: c and 'Detail_home__' in c)
                     if home_box:
                         for li in home_box.find_all('li'):
@@ -98,7 +95,7 @@ with sync_playwright() as p:
                                 if name and name != "なし" and name not in home_injuries:
                                     home_injuries.append(name)
                                     
-                    # 右側（アウェイチーム）の離脱者リスト
+                    # 右側（アウェイ）の解析
                     away_box = block.find(class_=lambda c: c and 'Detail_away__' in c)
                     if away_box:
                         for li in away_box.find_all('li'):
@@ -155,6 +152,9 @@ with sync_playwright() as p:
             "awayInjuriesCount": a_count
         }
         match_list.append(match_data)
+        
+        # 💡【重要】使い終わったタブとコンテキストは即座に完全破棄してメモリを解放
+        context.close()
 
     browser.close()
 
