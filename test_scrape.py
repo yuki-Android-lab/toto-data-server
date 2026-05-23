@@ -12,7 +12,7 @@ if not os.path.exists('data.json'):
 with open('data.json', 'r', encoding='utf-8') as f:
     match_list = json.load(f)
 
-print("🔄 [test_scrape] 既存の data.json に離脱者情報を追記します...")
+print("🔄 [test_scrape] 既存の data.json にNext.js生データから離脱者情報を追記します...")
 
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True)
@@ -21,7 +21,6 @@ with sync_playwright() as p:
         match_no = match_data["matchNo"]
         base_match_id = match_data["holdId"]
         
-        # URL構造の担保
         target_url = f"https://www.totoone.jp/match/{base_match_id + (match_no - 1)}"
         
         context = browser.new_context(
@@ -31,9 +30,8 @@ with sync_playwright() as p:
         page = context.new_page()
         
         try:
-            # --- 修正①：Next.jsの描画を確実に待つ ---
+            # ページアクセス（ネットワークが落ち着くまで待機）
             page.goto(target_url, wait_until="networkidle", timeout=60000)
-            # レンダリング安全マージンとして2秒静止
             time.sleep(2)
             
             html_content = page.content()
@@ -42,68 +40,49 @@ with sync_playwright() as p:
             home_injuries = []
             away_injuries = []
             
-            # --- 離脱者情報の取得（現代版アップデート） ---
-            # ページ内のすべての「li（選手が並ぶリスト）」を網羅する
-            for li in soup.find_all('li'):
-                txt = li.get_text().strip()
+            # --- 💡核心部：Next.jsの生JSONデータを直接ハッキングする ---
+            next_data_script = soup.find('script', id='__NEXT_DATA__')
+            
+            if next_data_script and next_data_script.string:
+                raw_json_text = next_data_script.string
                 
-                # 修正②：完全一致ではなく、テキストの中にキーワードが含まれているか（部分一致）で判定
-                if any(k in txt for k in ["出場微妙", "欠場濃厚", "出場停止", "欠場"]):
-                    # ポジション（GK/DF/MF/FW）と選手名を正規表現で分離
-                    p_match = re.search(r"(?:GK|DF|MF|FW)\s*([^\s（(]+)", txt)
-                    if p_match:
-                        name = p_match.group(1).strip()
-                        if name and name != "なし":
-                            # サイトの構造上、ホームとアウェイの判別は、親要素の並び順か
-                            # あるいはそのliが「何番目のブロック」にあるかで判別するのが最も安全です。
-                            # ここでは安全に、見つかった選手がどちらの所属エリアにいるかをDOMツリーを遡って判定します。
-                            
-                            # 該当するliの祖先を遡り、チームの左右を特定するためのアプローチ
-                            parent_text = ""
-                            p_node = li.find_parent('section')
-                            if p_node:
-                                parent_text = p_node.get_text()
-                            
-                            # もしsectionで見つからなければ、周辺のテキストから推測
-                            if not parent_text:
-                                p_node = li.find_parent('div')
-                                if p_node:
-                                    parent_text = p_node.get_text()
-
-                            # 暫定的に、最初のキーワード発見順、または従来の配列に安全に振り分け
-                            # ※ より厳密には、見つかったテキストを順次格納
-                            # 昔のロジックが期待する「配列への追加」を担保
-                            if "ホーム" in parent_text or "HOME" in parent_text:
-                                if name not in home_injuries:
-                                    home_injuries.append(name)
-                            elif "アウェイ" in parent_text or "AWAY" in parent_text:
-                                if name not in away_injuries:
-                                    away_injuries.append(name)
-                            else:
-                                # 判別がつかない場合は、昔のロジックの「前半/後半」の挙動に合わせ、
-                                # ひとまずhome側に入れておき、ログで目視できるようにします
-                                if name not in home_injuries and name not in away_injuries:
-                                    home_injuries.append(name)
-
-            # 万が一上のロジックですり抜けた場合のための、昔の「div一括検索」の強化版バックアップ
+                # JSONテキスト全体から「ポジション 選手名 ステータス」の並びを正規表現で一括抽出
+                # 例: "DF 選手名 欠場濃厚", "FW 選手名 出場停止" などのパターンを網羅
+                pattern = r'(GK|DF|MF|FW)\s+([^\s"\'）\)]+)\s+([^\s"\'\\]*(?:欠場|出場停止|出場微妙|離脱)[^\s"\'\\]*)'
+                matches = re.findall(pattern, raw_json_text)
+                
+                # 抽出したデータを前半（ホーム）と後半（アウェイ）に安全に振り分ける
+                # Next.jsのデータ構造上、ホームの選手データが先に出現し、その後アウェイの選手が出現します
+                half_point = len(matches) // 2
+                
+                for i, match in enumerate(matches):
+                    pos, name, status = match
+                    name = name.strip()
+                    # 特殊文字や不要なゴミの除去
+                    name = re.sub(r'\\u[0-9a-fA-F]{4}', '', name) 
+                    
+                    if name and name != "なし":
+                        if i < half_point:
+                            if name not in home_injuries:
+                                home_injuries.append(name)
+                        else:
+                            if name not in away_injuries:
+                                away_injuries.append(name)
+            
+            # バックアップ：もし上記で見つからない場合、文字列全体から力技で抽出
             if not home_injuries and not away_injuries:
-                for div in soup.find_all('div'):
-                    status_text = div.get_text().strip()
-                    if any(k in status_text for k in ["出場微妙", "欠場濃厚", "出場停止"]):
-                        parent_box = div.find_parent()
-                        if parent_box:
-                            for li in parent_box.find_all('li'):
-                                txt = li.get_text().strip()
-                                p_match = re.search(r"(?:GK|DF|MF|FW)\s*([^\s（(]+)", txt)
-                                if p_match:
-                                    name = p_match.group(1).strip()
-                                    if name and name != "なし" and name not in home_injuries:
-                                        home_injuries.append(name)
+                # HTML全体のテキストからダイレクトに検索
+                all_text = soup.get_text()
+                backup_matches = re.findall(r'(GK|DF|MF|FW)\s+([^\s（\(\n]+)\s*(?:欠場|出場停止|出場微妙)', all_text)
+                for pos, name in backup_matches:
+                    name = name.strip()
+                    if name and name != "なし" and name not in home_injuries:
+                        home_injuries.append(name)
 
             home_injuries_str = " / ".join(home_injuries) if home_injuries else "なし"
             away_injuries_str = " / ".join(away_injuries) if away_injuries else "なし"
             
-            # 既存の完璧なチーム名データを壊さずに、離脱者情報だけを上書き
+            # 既存のデータを壊さずに、離脱者情報だけを上書き
             match_data["homeInjuries"] = home_injuries_str
             match_data["awayInjuries"] = away_injuries_str
             match_data["homeInjuriesCount"] = len(home_injuries)
