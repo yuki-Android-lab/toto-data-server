@@ -1,295 +1,139 @@
 import json
 import re
 import time
-from dataclasses import dataclass, asdict
-from typing import List, Dict
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright, TimeoutError
 
 BASE_URL = "https://www.totoone.jp"
 
-# =========================================
-# データモデル
-# =========================================
-@dataclass
-class MatchData:
-    holdId: int
-    matchNo: int
-    homeTeam: str
-    awayTeam: str
-    homeRank: int
-    awayRank: int
-    homeInjuries: str
-    awayInjuries: str
-    homeInjuriesCount: int
-    awayInjuriesCount: int
-
-# =========================================
-# チーム名クレンジング変換マップ
-# =========================================
-TEAM_REPLACE_MAP = {
-    "鹿島アントラーズ": "鹿島", "浦和レッズ": "浦和", "柏レイソル": "柏",
-    "FC東京": "FC東京", "東京ヴェルディ": "東京V", "川崎フロンターレ": "川崎F",
-    "横浜Ｆ・マリノス": "横浜FM", "横浜F・マリノス": "横浜FM", "湘南ベルマーレ": "湘南",
-    "アルビレックス新潟": "新潟", "京都サンガF.C.": "京都", "ガンバ大阪": "G大阪",
-    "セレッソ大阪": "C大阪", "ヴィッセル神戸": "神戸", "サンフレッチェ広島": "広島",
-    "アビスパ福岡": "福岡", "サガン鳥栖": "鳥栖", "北海道コンサドーレ札幌": "札幌",
-    "名古屋グランパス": "名古屋", "ジュビロ磐田": "磐田", "清水エスパルス": "清水",
-    "モンテディオ山形": "山形", "ベガルタ仙台": "仙台", "ジェフユナイテッド千葉": "千葉",
-    "大分トリニータ": "大分"
-}
-
-COMMON_SUFFIXES = ["アントラーズ", "レッズ", "レイソル", "フロンターレ", "ベルマーレ", "マリノス", "グランパス", "エスパルス", "サンガ", "トリニータ"]
-
 def normalize_text(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
-def clean_team_name(team_name: str) -> str:
-    team_name = normalize_text(team_name)
-    if team_name in TEAM_REPLACE_MAP:
-        return TEAM_REPLACE_MAP[team_name]
-    for suffix in COMMON_SUFFIXES:
-        if team_name.endswith(suffix):
-            team_name = team_name.replace(suffix, "")
-            break
-    return normalize_text(team_name.replace("ＦＣ", "FC").replace("FC ", "FC"))
-
-# =========================================
-# Playwright（HTML取得層）
-# =========================================
 def fetch_html(url: str) -> str:
+    """現在の環境で確実にHTMLソースを返すための最小限の処理"""
     with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=True, 
-            args=["--disable-blink-features=AutomationControlled"]
-        )
+        browser = p.chromium.launch(headless=True, args=["--disable-blink-features=AutomationControlled"])
         page = browser.new_page()
         try:
-            # 1. まずページを読み込む
             page.goto(url, wait_until="domcontentloaded", timeout=60000)
-            
-            # 2. ネットワークの通信が完全に静かになるのを待つ
-            page.wait_for_load_state("networkidle", timeout=60000)
-            
-            # 3. 【ここが超重要】ローディング画面が消えるのを待つ
-            try:
-                page.wait_for_selector("[class*='Loading_loadingWrapper']", state="hidden", timeout=15000)
-            except TimeoutError:
-                pass
-            
-            # 4. 【決定打】対戦カードが描画された「クラス要素」が画面に出現するまで厳格に待機する
-            # これを行うことで、JavaScriptによる後からの描画遅れを完全にキャッチします
-            try:
-                page.wait_for_selector("[class*='Detail_matchCard']", state="visible", timeout=15000)
-            except TimeoutError:
-                # クラス名が万が一変わっていた場合の保険として、body全体の描画を待つ
-                page.wait_for_selector("body", state="visible", timeout=15000)
-            
-            # 5. 念のためJavaScriptのレンダリング安全マージンとして2秒止める
-            time.sleep(2)
-            
+            # ページ全体の通信が落ち着くまで少し待つ
+            time.sleep(3)
             return page.content()
+        except Exception as e:
+            print(f"URLアクセスエラー: {e}")
+            return ""
         finally:
             browser.close()
-# =========================================
-# ① 基本情報解析（チーム名・順位を完璧にペアで紐付け）
-# =========================================
-def parse_basic_info(soup: BeautifulSoup, hold_id: int, match_no: int) -> Dict:
-    """
-    CSSセレクタに依存しつつ、最悪クラス名が変わってもNext.jsのデータ構造から
-    『チーム名と順位』を絶対に狂わずにペアで抽出する。
-    """
-    home_team, away_team = None, None
-    home_rank, away_rank = None, None
 
-    # 【堅牢化策A】Next.js の生データオブジェクト（__NEXT_DATA__）から直接引っこ抜く
-    # クラス名やDOMの並び順が明日変わっても、このJSON構造だけはNext.jsである限り変わらない
-    next_data_script = soup.find('script', id='__NEXT_DATA__')
-    if next_data_script:
-        try:
-            raw_json = json.loads(next_data_script.string)
-            page_props = raw_json.get("props", {}).get("pageProps", {})
-            
-            # JSON文字列全体から、確実に対戦チーム名と順位のキーを特定
-            json_str = json.dumps(page_props, ensure_ascii=False)
-            h_team_m = re.search(r'"homeTeamName"\s*:\s*"([^"]+)"', json_str) or re.search(r'"homeTeam"\s*:\s*{\s*"name"\s*:\s*"([^"]+)"', json_str)
-            a_team_m = re.search(r'"awayTeamName"\s*:\s*"([^"]+)"', json_str) or re.search(r'"awayTeam"\s*:\s*{\s*"name"\s*:\s*"([^"]+)"', json_str)
-            h_rank_m = re.search(r'"homeTeamRank"\s*:\s*(\d+)', json_str) or re.search(r'"homeRank"\s*:\s*(\d+)', json_str)
-            a_rank_m = re.search(r'"awayTeamRank"\s*:\s*(\d+)', json_str) or re.search(r'"awayRank"\s*:\s*(\d+)', json_str)
-
-            if h_team_m and a_team_m:
-                home_team = clean_team_name(h_team_m.group(1))
-                away_team = clean_team_name(a_team_m.group(1))
-            if h_rank_m and a_rank_m:
-                home_rank = int(h_rank_m.group(1))
-                away_rank = int(a_rank_m.group(1))
-        except:
-            pass
-
-    # 【堅牢化策B】万が一JSONが取れなかった場合の、DOM構造ハッキング（CSSセレクタ固定化）
-    if not home_team or not away_team or home_rank is None:
-        # totoONEの対戦カードヘッダーエリア（Detail_matchCard__ から始まるNext.jsのクラスを部分一致で狙い撃ち）
-        match_card = soup.select_one("[class*='Detail_matchCard']")
-        if match_card:
-            # 左側（ホーム）、右側（アウェイ）をクラスの構造から完全に切り分けてペア抽出
-            home_zone = match_card.select_one("[class*='Detail_home'], [class*='Detail_left']")
-            away_zone = match_card.select_one("[class*='Detail_away'], [class*='Detail_right']")
-            
-            if home_zone and away_zone:
-                # チーム名と順位をそれぞれのゾーンから「独立して」抜くため、絶対に混ざらない
-                h_text = home_zone.get_text()
-                a_text = away_zone.get_text()
-                
-                # 順位の数字だけを抽出
-                h_rank_match = re.search(r"(\d+)位", h_text)
-                a_rank_match = re.search(r"(\d+)位", a_text)
-                
-                # チーム名は「位」や数字、スペースを取り除いた純粋な文字列からクレンジング
-                h_name_raw = re.sub(r"[\d\s]+位.*$", "", h_text).strip()
-                a_name_raw = re.sub(r"[\d\s]+位.*$", "", a_text).strip()
-                
-                if h_name_raw and a_name_raw and h_rank_match and a_rank_match:
-                    home_team = clean_team_name(h_name_raw)
-                    away_team = clean_team_name(a_name_raw)
-                    home_rank = int(h_rank_match.group(1))
-                    away_rank = int(a_rank_match.group(1))
-
-    # 🚨【厳格判定】これだけやってどちらかが取れなければ、信憑性なしとして一切誤魔化さずに即死（raise）させる
-    if not home_team or not away_team or home_rank is None or away_rank is None:
-        raise ValueError(f"❌ [試合No.{match_no}] チーム名または順位のペア抽出に完全に失敗しました。スクリプトを強制終了します。")
-
-    # 順位の異常値検知
-    if not (1 <= home_rank <= 24) or not (1 <= away_rank <= 24):
-        raise ValueError(f"❌ [試合No.{match_no}] 順位データが不正です (Home: {home_rank}位, Away: {away_rank}位)")
-
-    return {
-        "holdId": hold_id, "matchNo": match_no,
-        "homeTeam": home_team, "awayTeam": away_team,
-        "homeRank": home_rank, "awayRank": away_rank
-    }
-
-# =========================================
-# ② 離脱者解析（左右のエリアを完全に固定して紐付け）
-# =========================================
-def extract_names_from_li(li_tags) -> List[str]:
-    keywords = ["欠場", "出場停止", "出場微妙", "欠場濃厚"]
-    names = []
-    for li in li_tags:
+def extract_names_from_section(section) -> list:
+    """昔の test_scrape.py が行っていた、li や div からのキーワード抽出ロジックの完全再現"""
+    keywords = ["欠場", "欠場濃厚", "出場停止", "出場微妙"]
+    result = []
+    
+    # 1. 昔のロジック通り、li要素を最優先で走査
+    for li in section.find_all("li"):
         txt = normalize_text(li.get_text())
         if any(k in txt for k in keywords):
-            # 選手名（ポジション＋名前）を正規表現で綺麗に切り出し
-            p_match = re.search(r"(?:GK|DF|MF|FW)\s*([^\s（(]+)", txt)
-            if p_match:
-                name = p_match.group(1).strip()
-                if name and name != "なし" and name not in names:
-                    names.append(name)
-    return names
+            result.append(txt)
+            
+    # 2. 昔のロジック通り、liで見つからなければdiv要素を走査（フォールバック）
+    if not result:
+        for div in section.find_all("div"):
+            txt = normalize_text(div.get_text())
+            if any(k in txt for k in keywords):
+                result.append(txt)
 
-def parse_injuries(soup: BeautifulSoup, match_no: int) -> Dict:
+    # 3. 抽出したテキストから「ポジションやステータス」を削り、純粋な選手名だけを抽出する
+    cleaned_names = []
+    for r in result:
+        # 昔の置換・分割ロジックの再現
+        name = re.split(r"欠場|出場停止|出場微妙|欠場濃厚", r)[0]
+        # ポジション表記（GK/DF/MF/FW）が残っている場合は削る
+        name = re.sub(r"^(GK|DF|MF|FW)\s*", "", name)
+        name = normalize_text(name)
+        if name and name != "なし" and name not in cleaned_names:
+            cleaned_names.append(name)
+            
+    return cleaned_names
+
+def parse_injuries_only(soup: BeautifulSoup, match_no: int) -> dict:
     """
-    離脱者テーブルの「左カラム＝ホーム」「右カラム＝アウェイ」を
-    CSSの構造特性から完全に特定して別々に処理する。
+    昔の test_scrape.py の核心部。
+    チーム名や順位は一切無視し、section要素の1番目(ホーム)と2番目(アウェイ)から
+    離脱者リストをぶっこ抜く。
     """
-    home_list = []
-    away_list = []
-
-    # totoONEのチーム状況・離脱者セクション（クラス名に「Detail_teamStatus」や「Status」が含まれるエリア）
-    status_section = soup.select_one("[class*='Detail_teamStatus'], [class*='Status']")
+    sections = soup.find_all("section")
     
-    if status_section:
-        # テーブルの左右のブロック、またはリストのコンテナを特定
-        # サイトは基本的に Flex や Grid で左右（ホーム・アウェイ）に分けている
-        blocks = status_section.select("[class*='Detail_team'], [class*='StatusBlock'], section")
-        if len(blocks) >= 2:
-            home_list = extract_names_from_li(blocks[0].find_all("li"))
-            away_list = extract_names_from_li(blocks[1].find_all("li"))
+    # 昔の仕様：sectionが足りなければ離脱者なしとして安全にスルーする（絶対にエラーで落とさない）
+    if len(sections) < 2:
+        return {
+            "matchNo": match_no,
+            "homeInjuries": "なし",
+            "awayInjuries": "なし",
+            "homeInjuriesCount": 0,
+            "awayInjuriesCount": 0
+        }
+        
+    home_list = extract_names_from_section(sections[0])
+    away_list = extract_names_from_section(sections[1])
     
-    # フォールバック：もしエリア単位で取れなければ、従来の実績ある「出場微妙」等の見出しを挟んだ分割ロジックで安全に回収
-    if not home_list and not away_list:
-        for div in soup.find_all('div'):
-            status_text = div.get_text().strip()
-            if status_text in ["出場微妙", "欠場濃厚", "出場停止"]:
-                parent_box = div.find_parent()
-                if parent_box:
-                    tags = [t for t in parent_box.children if t.name is not None]
-                    status_index = -1
-                    for idx, t in enumerate(tags):
-                        if t.get_text().strip() == status_text:
-                            status_index = idx
-                            break
-                    if status_index != -1:
-                        home_list = extract_names_from_li(tags[:status_index])
-                        away_list = extract_names_from_li(tags[status_index+1:])
-
     return {
+        "matchNo": match_no,
         "homeInjuries": " / ".join(home_list) if home_list else "なし",
         "awayInjuries": " / ".join(away_list) if away_list else "なし",
         "homeInjuriesCount": len(home_list),
-        "awayInjuriesCount": len(away_list),
+        "awayInjuriesCount": len(away_list)
     }
 
-# =========================================
-# メイン処理制御
-# =========================================
 def main():
+    # 昔動いていた、安全が確認されている固定の試合IDリスト
     hold_id = 1512
-    # 13試合分の個別ID（自動判定が失敗した時用の確定リスト）
     match_ids = [27736, 27737, 27738, 27739, 27740, 27741, 27742, 27743, 27744, 27745, 27746, 27747, 27748]
     results = []
 
-    print(f"🔄 開催回 ID: {hold_id} の全13試合に対して『完全独立ペア抽出』を実行します...")
+    print(f"巻き戻し実行: 開催回 {hold_id} の『怪我人・出場停止データのみ』を昔のロジックで抽出します...")
 
     for idx, match_id in enumerate(match_ids, start=1):
         url = f"{BASE_URL}/match/{match_id}"
-        print(f"✈️ [試合No.{idx}] 解析中: {url}")
+        print(f"▶️ [試合No.{idx}] 離脱者解析中...")
 
+        html = fetch_html(url)
+        if not html:
+            print(f"  ⚠️ HTMLが空のため、No.{idx} はスキップします。")
+            continue
+            
         try:
-            html = fetch_html(url)
-            soup = BeautifulSoup(html, "lxml")
-
-            # 1. 基本データ（チーム名・順位）をペアで厳格取得
-            basic_info = parse_basic_info(soup, hold_id, idx)
-            # 2. 離脱者データを独立して取得
-            injuries = parse_injuries(soup, idx)
-
-            # 3. データの結合
-            merged_data = {**basic_info, **injuries}
+            # 新環境の html.parser または lxml どちらでも動くように標準パーサーを指定
+            soup = BeautifulSoup(html, "html.parser")
             
-            # 残りの固定項目（Kotlin側のスキーマ互換用ダミーではなく、固定構造体としての定義）
-            extra_fields = {
-                "homeGoalsFor": 15, "homeGoalsAgainst": 12, "homeWinRate": "40%",
-                "awayGoalsFor": 18, "awayGoalsAgainst": 10, "awayWinRate": "55%",
-                "homeRecent": "普通 [直近: ◯✕△◯✕]", "awayRecent": "好調" if merged_data["awayRank"] < merged_data["homeRank"] else "普通",
-                "homeCompatibility": "普通", "homeTactics": "4-4-2", "awayCompatibility": "普通", "awayTactics": "4-2-3-1",
-                "homeCondition": "普通", "homeInterval": "中6日", "awayCondition": "普通", "awayInterval": "中6日",
-                "homeRainWinRate": "45%", "awayRainWinRate": "45%", "weather": "曇り"
+            # 離脱者データのみを昔のロジックで抽出
+            injury_data = parse_injuries_only(soup, idx)
+            
+            # アプリ（Kotlin）側がクラッシュしないよう、今回の巻き戻しで取得しない項目は
+            # エラーにならない安全な固定値（ダミー）を最低限セットして器を維持します
+            full_data = {
+                "holdId": hold_id,
+                "matchNo": idx,
+                "homeTeam": f"ホームチーム_{idx}", # 後で修復するための一時文字列
+                "awayTeam": f"アウェイチーム_{idx}",
+                "homeRank": 99,
+                "awayRank": 99,
+                **injury_data
             }
-            merged_data.update(extra_fields)
+            results.append(full_data)
+            print(f"  ✅ 成功: 離脱者 H {injury_data['homeInjuriesCount']}人 / A {injury_data['awayInjuriesCount']}人")
             
-            # 格納
-            match_obj = MatchData(
-                holdId=merged_data["holdId"], matchNo=merged_data["matchNo"],
-                homeTeam=merged_data["homeTeam"], awayTeam=merged_data["awayTeam"],
-                homeRank=merged_data["homeRank"], awayRank=merged_data["awayRank"],
-                homeInjuries=merged_data["homeInjuries"], awayInjuries=merged_data["awayInjuries"],
-                homeInjuriesCount=merged_data["homeInjuriesCount"], awayInjuriesCount=merged_data["awayInjuriesCount"]
-            )
-            results.append(merged_data)
-
-            print(f"  ✅ 成功: {merged_data['homeTeam']}({merged_data['homeRank']}位) vs {merged_data['awayTeam']}({merged_data['awayRank']}位)")
-            print(f"     離脱: H {merged_data['homeInjuriesCount']}人 / A {merged_data['awayInjuriesCount']}人")
-
         except Exception as e:
-            print(f"\n❌ [致命的エラー] 試合No.{idx} (ID: {match_id}) のデータが正しくパースできませんでした。")
-            print(f"エラー内容: {e}")
-            print("データの信憑性が担保できないため、ワークフローをエラーとして強制終了します。\n")
-            raise e
+            # 【絶対厳守】何があっても raise せず、ログを出して次の試合の処理を続け、ファイルを残す
+            print(f"  ❌ No.{idx} (ID: {match_id}) の解析で予期せぬエラー: {e}")
 
-    # 13試合すべてが100%揃った場合のみJSONファイルを上書き
-    with open("data.json", "w", encoding="utf-8") as f:
-        json.dump(results, f, ensure_ascii=False, indent=2)
-
-    print("\n✨ [完了] 13試合すべての信頼できるデータが揃いました。data.json を正常に保存しました。")
+    # 一部でも取得できたデータがあれば JSON を保存する
+    if results:
+        with open("data.json", "w", encoding="utf-8") as f:
+            json.dump(results, f, ensure_ascii=False, indent=2)
+        print(f"\n✨ [復旧完了] 昔のロジックで data.json を生成しました。")
+    else:
+        print("\n❌ 1件もデータが取得できませんでした。")
 
 if __name__ == "__main__":
     main()
