@@ -18,8 +18,8 @@
         "awayInjuries": "新井章太 / 山川哲史 / 岩波拓也 / 井出遥也 / 相澤デイビッド / 扇原貴宏 / 里見汰福 / 冨永虹七",
         "homeInjuriesCount": 3,
         "awayInjuriesCount": 8,
-        "homeCondition": "普通",
-        "homeConditionCoef": 0.0,
+        "homeCondition": "悪化",
+        "homeConditionCoef": -0.5,
         "awayCondition": "普通",
         "awayConditionCoef": 0.0
     },
@@ -90,10 +90,10 @@
         "awayInjuries": "加藤有輝 / 柴田壮介 / 熊田直紀",
         "homeInjuriesCount": 1,
         "awayInjuriesCount": 3,
-        "homeCondition": "普通",
-        "homeConditionCoef": 0.0,
-        "awayCondition": "普通",
-        "awayConditionCoef": 0.0
+        "homeCondition": "良好",
+        "homeConditionCoef": 0.2,
+        "awayCondition": "良好",
+        "awayConditionCoef": 0.2
     },
     {
         "holdId": 1631,
@@ -140,8 +140,8 @@
         "awayInjuriesCount": 3,
         "homeCondition": "普通",
         "homeConditionCoef": 0.0,
-        "awayCondition": "普通",
-        "awayConditionCoef": 0.0
+        "awayCondition": "良好",
+        "awayConditionCoef": 0.2
     },
     {
         "holdId": 1631,
@@ -164,8 +164,8 @@
         "awayInjuriesCount": 6,
         "homeCondition": "普通",
         "homeConditionCoef": 0.0,
-        "awayCondition": "普通",
-        "awayConditionCoef": 0.0
+        "awayCondition": "悪化",
+        "awayConditionCoef": -0.5
     },
     {
         "holdId": 1631,
@@ -188,8 +188,8 @@
         "awayInjuriesCount": 7,
         "homeCondition": "普通",
         "homeConditionCoef": 0.0,
-        "awayCondition": "普通",
-        "awayConditionCoef": 0.0
+        "awayCondition": "良好",
+        "awayConditionCoef": 0.2
     },
     {
         "holdId": 1631,
@@ -284,8 +284,8 @@
         "awayInjuriesCount": 6,
         "homeCondition": "普通",
         "homeConditionCoef": 0.0,
-        "awayCondition": "普通",
-        "awayConditionCoef": 0.0
+        "awayCondition": "悪化",
+        "awayConditionCoef": -0.5
     },
     {
         "holdId": 1631,
@@ -306,8 +306,8 @@
         "awayInjuries": "福岡将太 / 佐々木翔悟 / イッサム・ジェバリ / 植中朝日 / 半田陸 / 横井佑弥 / 藤本祥輝 / 林大地",
         "homeInjuriesCount": 4,
         "awayInjuriesCount": 8,
-        "homeCondition": "普通",
-        "homeConditionCoef": 0.0,
+        "homeCondition": "悪化",
+        "homeConditionCoef": -0.5,
         "awayCondition": "普通",
         "awayConditionCoef": 0.0
     }
