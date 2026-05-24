@@ -5,7 +5,7 @@ import time
 from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
 
-print("3️⃣ [teamCondition.py] カウント基準を改善し、確実に『直近5試合』のスコアを計算します...")
+print("3️⃣ [teamCondition.py] 直近4試合のスコア（数字）を基準にトレンドを計算します...")
 
 # 1. 既存の data.json を読み込む
 if not os.path.exists('data.json'):
@@ -36,26 +36,25 @@ def check_if_opponent_is_top5(opp_name, match_list):
             if 1 <= int(m["awayRank"]) <= 5: return True
     return False
 
-def analyze_recent_5_from_texts(text_list, team_name, is_self_top5, match_list):
+def analyze_recent_4(text_list, team_name, is_self_top5, match_list):
     """
-    スコアが有効な試合を『確実に5試合溜まるまで』走査し、勝敗をガチ判定する
+    【4試合割り切り】スコアから勝・分・敗をガチ判定してトレンドを出す
     """
     wins, draws, losses, tough_losses = 0, 0, 0, 0
     processed_count = 0
     
-    # 💡 スライス[:5]を撤廃し、渡されたリスト（全戦績）を上から順番に精査
+    # 4試合が確定するまで回す
     for txt in text_list:
-        # 有効な5試合が溜まった時点でループを完全に抜ける
-        if processed_count >= 5:
+        if processed_count >= 4:
             break
             
         score_match = re.search(r"(\d+)-(\d+)", txt)
         if not score_match:
-            continue  # スコアのないゴミ行や未消化試合はカウントせずスキップ
+            continue
             
         processed_count += 1
-        my_score = int(score_match.group(1))   # 自チーム得点
-        opp_score = int(score_match.group(2))  # 相手チーム得点
+        my_score = int(score_match.group(1))
+        opp_score = int(score_match.group(2))
         
         if my_score > opp_score:
             wins += 1
@@ -71,28 +70,26 @@ def analyze_recent_5_from_texts(text_list, team_name, is_self_top5, match_list):
                     tough_losses += 1
 
     if processed_count == 0:
-        return "普通", 0.0, "0勝0分0敗(テキストなし。)"
+        return "普通", 0.0, "0勝0分0敗(データなし)"
 
-    # 1〜5の基本ルール判定
-    if wins >= 4:
+    # 💡 4試合基準のトレンドマッピング
+    # 良好：3勝以上、または2勝2分（負けなし）
+    # 悪化：0勝、または1勝3敗
+    if wins >= 3:
         status = "良好"
-    elif wins == 3:
-        status = "良好" if draws >= 1 else "普通"
-    elif wins == 2:
-        status = "普通" if draws >= 1 else "悪化"
-    elif wins == 1:
-        status = "普通" if draws >= 2 else "悪化"
+    elif wins == 2 and draws == 2:
+        status = "良好"
+    elif wins == 2 or (wins == 1 and draws >= 1):
+        status = "普通"
     else:
         status = "悪化"
         
-    # 裏ロジック救済の発動
+    # 裏ロジック救済の発動（4試合用にチューニング）
     if status == "悪化" and not is_self_top5:
-        if wins == 0 and tough_losses >= 3:
+        # 0勝でも上位相手に1点差負けが2試合以上、または1勝で上位1点差負けが2試合なら「普通」に救済
+        if tough_losses >= 2:
             status = "普通"
-            print(f"   ✨ 救済発動 [{team_name}]: スコア上0勝ですが上位に1点差負けが{tough_losses}試合あるため『普通』に引き上げ")
-        elif wins > 0 and tough_losses >= 2:
-            status = "普通"
-            print(f"   ✨ 救済発動 [{team_name}]: スコア上{wins}勝ですが上位に1点差負けが{tough_losses}試合あるため『普通』に引き上げ")
+            print(f"   ✨ 救済発動 [{team_name}]: 直近4戦で上位へ1点差負けが{tough_losses}試合あるため『普通』に引き上げ")
 
     coef = 0.0
     if status == "良好":
@@ -100,7 +97,7 @@ def analyze_recent_5_from_texts(text_list, team_name, is_self_top5, match_list):
     elif status == "悪化":
         coef = -0.5
         
-    return status, coef, f"{wins}勝{draws}分{losses}敗(合計{processed_count}試合解析 / 上位1点差負け:{tough_losses})"
+    return status, coef, f"{wins}勝{draws}分{losses}敗(直近{processed_count}試合ベース / 上位への1点差負け:{tough_losses})"
 
 
 # 3. スクレイピングメイン処理
@@ -140,14 +137,14 @@ with sync_playwright() as p:
                     if txt not in valid_li_texts:
                         valid_li_texts.append(txt)
             
-            # 前半ブロックと後半ブロックに分配
+            # 綺麗に2等分して左右を分ける（4試合ずつなら、2等分すれば確実に溢れず綺麗に入ります）
             half = len(valid_li_texts) // 2
             home_texts = valid_li_texts[:half]
             away_texts = valid_li_texts[half:]
             
-            # 各チームの計算実行（溜まるまでループする新ロジック）
-            home_status, home_coef, home_detail = analyze_recent_5_from_texts(home_texts, home_team, is_home_top5, match_list)
-            away_status, away_coef, away_detail = analyze_recent_5_from_texts(away_texts, away_team, is_away_top5, match_list)
+            # 各チームの計算実行
+            home_status, home_coef, home_detail = analyze_recent_4(home_texts, home_team, is_home_top5, match_list)
+            away_status, away_coef, away_detail = analyze_recent_4(away_texts, away_team, is_away_top5, match_list)
             
         except Exception as e:
             print(f"   ⚠️ エラー(試合No.{match_no}): {e}")
@@ -175,4 +172,4 @@ with sync_playwright() as p:
 with open('data.json', 'w', encoding='utf-8') as f:
     json.dump(match_list, f, ensure_ascii=False, indent=4)
 
-print("💾 [teamCondition.py] 直近5試合確定バッファ版にて、data.json を最終保存しました！")
+print("💾 [teamCondition.py] 直近4試合トレンド判定版にて、data.json を最終保存しました！")
