@@ -43,6 +43,10 @@ jobs:
         run: |
           python test_scrape.py
 
+      - name: 3.5 チームコンディションの追記を実行
+        run: |
+          python teamCondition.py
+          
       - name: 4. 生成されたdata.jsonをリポジトリに自動コミット・プッシュ
         run: |
           git config --local user.name "github-actions[bot]"
