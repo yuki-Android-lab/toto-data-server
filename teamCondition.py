@@ -5,7 +5,7 @@ import time
 from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
 
-print("3️⃣ [teamCondition.py] 直近4試合のスコア（数字）を基準にトレンドを計算します...")
+print("3️⃣ [teamCondition.py] カラム・背景色の構造から、HOMEとAWAYを完璧に分離します...")
 
 # 1. 既存の data.json を読み込む
 if not os.path.exists('data.json'):
@@ -38,12 +38,11 @@ def check_if_opponent_is_top5(opp_name, match_list):
 
 def analyze_recent_4(text_list, team_name, is_self_top5, match_list):
     """
-    【4試合割り切り】スコアから勝・分・敗をガチ判定してトレンドを出す
+    【4試合割り切り】スコアから勝・分・敗を判定してトレンドを出す
     """
     wins, draws, losses, tough_losses = 0, 0, 0, 0
     processed_count = 0
     
-    # 4試合が確定するまで回す
     for txt in text_list:
         if processed_count >= 4:
             break
@@ -72,9 +71,7 @@ def analyze_recent_4(text_list, team_name, is_self_top5, match_list):
     if processed_count == 0:
         return "普通", 0.0, "0勝0分0敗(データなし)"
 
-    # 💡 4試合基準のトレンドマッピング
-    # 良好：3勝以上、または2勝2分（負けなし）
-    # 悪化：0勝、または1勝3敗
+    # 4試合基準のトレンドマッピング
     if wins >= 3:
         status = "良好"
     elif wins == 2 and draws == 2:
@@ -84,9 +81,8 @@ def analyze_recent_4(text_list, team_name, is_self_top5, match_list):
     else:
         status = "悪化"
         
-    # 裏ロジック救済の発動（4試合用にチューニング）
+    # 裏ロジック救済
     if status == "悪化" and not is_self_top5:
-        # 0勝でも上位相手に1点差負けが2試合以上、または1勝で上位1点差負けが2試合なら「普通」に救済
         if tough_losses >= 2:
             status = "普通"
             print(f"   ✨ 救済発動 [{team_name}]: 直近4戦で上位へ1点差負けが{tough_losses}試合あるため『普通』に引き上げ")
@@ -129,25 +125,60 @@ with sync_playwright() as p:
             is_home_top5 = get_top5_status(home_team, match_list)
             is_away_top5 = get_top5_status(away_team, match_list)
             
-            # 全 <li> タグから戦績テキストを全回収
-            valid_li_texts = []
-            for li in soup.find_all('li'):
-                txt = li.get_text().strip().replace('\n', ' ')
-                if "/" in txt and re.search(r"\d+-\d+", txt):
-                    if txt not in valid_li_texts:
-                        valid_li_texts.append(txt)
+            home_texts = []
+            away_texts = []
             
-            # 綺麗に2等分して左右を分ける（4試合ずつなら、2等分すれば確実に溢れず綺麗に入ります）
-            half = len(valid_li_texts) // 2
-            home_texts = valid_li_texts[:half]
-            away_texts = valid_li_texts[half:]
+            # 💡 【視覚的・構造的アプローチへの根本変更】
+            # 表（table）の行（tr）を走査し、左側のセル（ピンク）と右側のセル（ブルー）を完全に分けて回収
+            for tr in soup.find_all('tr'):
+                tds = tr.find_all('td')
+                # 左右に並ぶ2カラム構造のテーブルセルを検出
+                if len(tds) >= 2:
+                    td_left = tds[0].get_text().strip().replace('\n', ' ')
+                    td_right = tds[1].get_text().strip().replace('\n', ' ')
+                    
+                    if "/" in td_left and re.search(r"\d+-\d+", td_left):
+                        home_texts.append(td_left)
+                    if "/" in td_right and re.search(r"\d+-\d+", td_right):
+                        away_texts.append(td_right)
             
+            # 💡 もし上のtable/td構造で拾えなかった場合の、li要素のクラス名（背景色）バックアップ判定
+            if not home_texts or not away_texts:
+                home_texts = []
+                away_texts = []
+                for li in soup.find_all('li'):
+                    txt = li.get_text().strip().replace('\n', ' ')
+                    if "/" in txt and re.search(r"\d+-\d+", txt):
+                        # トトワンの背景色クラス名（代表的なピンク/ブルーの判定、またはカラム属性）
+                        # クラス名に 'home' や 'pink'、あるいは左側を指す属性があればHOMEに入れる
+                        cls = li.get_attr_list('class')
+                        cls_str = "".join(cls) if cls else ""
+                        
+                        if 'home' in cls_str or 'pink' in cls_str:
+                            home_texts.append(txt)
+                        elif 'away' in cls_str or 'blue' in cls_str:
+                            away_texts.append(txt)
+            
+            # 💡 最終防衛ライン（万が一どちらかが空になった場合の安全な機械的2等分）
+            if not home_texts or not away_texts:
+                all_lis = []
+                for li in soup.find_all('li'):
+                    txt = li.get_text().strip().replace('\n', ' ')
+                    if "/" in txt and re.search(r"\d+-\d+", txt):
+                        if txt not in all_lis:
+                            all_lis.append(txt)
+                half = len(all_lis) // 2
+                home_texts = all_lis[:half]
+                away_texts = all_lis[half:]
+
             # 各チームの計算実行
             home_status, home_coef, home_detail = analyze_recent_4(home_texts, home_team, is_home_top5, match_list)
             away_status, away_coef, away_detail = analyze_recent_4(away_texts, away_team, is_away_top5, match_list)
             
         except Exception as e:
-            print(f"   ⚠️ エラー(試合No.{match_no}): {e}")
+            # ⚠️ f-stringの中でのバックスラッシュを排除した安全なエラーログ出力
+            err_msg = str(e).replace('\n', ' ')
+            print(f"   ⚠️ エラー(試合No.{match_no}): {err_msg}")
             home_status, home_coef, home_detail = "普通", 0.0, "エラーにより判定不能"
             away_status, away_coef, away_detail = "普通", 0.0, "エラーにより判定不能"
         finally:
@@ -162,8 +193,8 @@ with sync_playwright() as p:
         h_tag = " [★現在1~5位]" if is_home_top5 else ""
         a_tag = " [★現在1~5位]" if is_away_top5 else ""
         
-        print(f"   🏠 HOME {home_team}{h_tag}: {home_detail} -> 判定:{home_status} ({home_coef})")
-        print(f"   🚀 AWAY {away_team}{a_tag}: {away_detail} -> 判定:{away_status} ({away_coef})")
+        print(f"   🏠 HOME {home_team}{h_tag}: {home_detail}")
+        print(f"   🚀 AWAY {away_team}{a_tag}: {away_detail}")
         print("-" * 50)
         
     browser.close()
@@ -172,4 +203,4 @@ with sync_playwright() as p:
 with open('data.json', 'w', encoding='utf-8') as f:
     json.dump(match_list, f, ensure_ascii=False, indent=4)
 
-print("💾 [teamCondition.py] 直近4試合トレンド判定版にて、data.json を最終保存しました！")
+print("💾 [teamCondition.py] 背景・構造分離型（直近4試合）にて、data.json を最終保存しました！")
