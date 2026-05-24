@@ -5,7 +5,7 @@ import time
 from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
 
-print("3️⃣ [teamCondition.py] チーム名マッチング方式で直近5試合を完璧に仕分けます...")
+print("3️⃣ [teamCondition.py] カウント基準を改善し、確実に『直近5試合』のスコアを計算します...")
 
 # 1. 既存の data.json を読み込む
 if not os.path.exists('data.json'):
@@ -17,15 +17,6 @@ with open('data.json', 'r', encoding='utf-8') as f:
 
 # 固定の13試合IDリスト
 match_ids = [27736, 27737, 27738, 27739, 27740, 27741, 27742, 27743, 27744, 27745, 27746, 27747, 27748]
-
-# リーグに存在する全チーム名のマスター（対戦相手の識別に利用）
-ALL_TEAMS = [
-    "札幌", "仙台", "秋田", "山形", "いわき", "鹿島", "水戸", "栃木", "群馬", "浦和", 
-    "大宮", "千葉", "柏", "FC東京", "東京V", "町田", "川崎F", "横浜FM", "横浜FC", "湘南", 
-    "甲府", "松本", "新潟", "富山", "金沢", "清水", "藤枝", "磐田", "名古屋", "岐阜", 
-    "京都", "G大阪", "C大阪", "神戸", "奈良", "鳥取", "岡山", "広島", "レノファ山口", "山口", 
-    "讃岐", "徳島", "愛媛", "今治", "福岡", "北九州", "鳥栖", "長崎", "熊本", "大分", "宮崎", "鹿児島", "琉球"
-]
 
 def get_top5_status(team_name, match_list):
     """対象チームが現在1〜5位の上位チームであるかを厳密に判定"""
@@ -47,15 +38,20 @@ def check_if_opponent_is_top5(opp_name, match_list):
 
 def analyze_recent_5_from_texts(text_list, team_name, is_self_top5, match_list):
     """
-    スコアの数字だけで勝・分・敗をガチ判定する
+    スコアが有効な試合を『確実に5試合溜まるまで』走査し、勝敗をガチ判定する
     """
     wins, draws, losses, tough_losses = 0, 0, 0, 0
     processed_count = 0
     
-    for txt in text_list[:5]:
+    # 💡 スライス[:5]を撤廃し、渡されたリスト（全戦績）を上から順番に精査
+    for txt in text_list:
+        # 有効な5試合が溜まった時点でループを完全に抜ける
+        if processed_count >= 5:
+            break
+            
         score_match = re.search(r"(\d+)-(\d+)", txt)
         if not score_match:
-            continue
+            continue  # スコアのないゴミ行や未消化試合はカウントせずスキップ
             
         processed_count += 1
         my_score = int(score_match.group(1))   # 自チーム得点
@@ -104,7 +100,7 @@ def analyze_recent_5_from_texts(text_list, team_name, is_self_top5, match_list):
     elif status == "悪化":
         coef = -0.5
         
-    return status, coef, f"{wins}勝{draws}分{losses}敗(スコア基準 / 上位への1点差負け:{tough_losses}試合)"
+    return status, coef, f"{wins}勝{draws}分{losses}敗(合計{processed_count}試合解析 / 上位1点差負け:{tough_losses})"
 
 
 # 3. スクレイピングメイン処理
@@ -133,11 +129,10 @@ with sync_playwright() as p:
             html_content = page.content()
             soup = BeautifulSoup(html_content, "html.parser")
             
-            # 1〜5位フラグ
             is_home_top5 = get_top5_status(home_team, match_list)
             is_away_top5 = get_top5_status(away_team, match_list)
             
-            # ページ内の全 <li> タグから戦績テキストを全回収
+            # 全 <li> タグから戦績テキストを全回収
             valid_li_texts = []
             for li in soup.find_all('li'):
                 txt = li.get_text().strip().replace('\n', ' ')
@@ -145,28 +140,12 @@ with sync_playwright() as p:
                     if txt not in valid_li_texts:
                         valid_li_texts.append(txt)
             
-            # 💡 チーム名マッチングによる完全分離ロジック
-            home_texts = []
-            away_texts = []
-            
-            for t in valid_li_texts:
-                # 行の中に含まれるJリーグのチーム名を探す
-                found_teams = [team for team in ALL_TEAMS if team in t]
-                
-                # 自身のチーム名が含まれている行、またはACLなどの特殊表記の割り当て
-                # トトワンの並び（左側リスト＝HOME、右側リスト＝AWAY）の順番を維持しつつ、
-                # 含まれる対戦相手の文字列をベースに、より厳密に狙い撃ちします。
-                # ページの構造上、前半に並ぶものがHOME、後半に並ぶものがAWAYになる性質と組み合わせます。
-                pass
-            
-            # よりシンプルかつ確実に、取得できた全件を「上半分」と「下半分」に分けるのではなく、
-            # デバッグログの通り、完全に2つの独立したブロック（HOME直近、AWAY直近）として取得できているため、
-            # リストの総数をきれいに2等分して割り振ります（これが一番バグが起きません）
+            # 前半ブロックと後半ブロックに分配
             half = len(valid_li_texts) // 2
             home_texts = valid_li_texts[:half]
             away_texts = valid_li_texts[half:]
             
-            # 各チームの計算実行
+            # 各チームの計算実行（溜まるまでループする新ロジック）
             home_status, home_coef, home_detail = analyze_recent_5_from_texts(home_texts, home_team, is_home_top5, match_list)
             away_status, away_coef, away_detail = analyze_recent_5_from_texts(away_texts, away_team, is_away_top5, match_list)
             
@@ -196,4 +175,4 @@ with sync_playwright() as p:
 with open('data.json', 'w', encoding='utf-8') as f:
     json.dump(match_list, f, ensure_ascii=False, indent=4)
 
-print("💾 [teamCondition.py] 2等分スプリット修正版にて、data.json を最終保存しました！")
+print("💾 [teamCondition.py] 直近5試合確定バッファ版にて、data.json を最終保存しました！")
