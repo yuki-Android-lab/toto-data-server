@@ -5,7 +5,7 @@ import time
 from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
 
-print("3️⃣ [teamCondition.py] カラム・背景色の構造から、HOMEとAWAYを完璧に分離します...")
+print("3️⃣ [teamCondition.py] カラム構造からHOMEとAWAYを完璧に分離します（バグ修正版）...")
 
 # 1. 既存の data.json を読み込む
 if not os.path.exists('data.json'):
@@ -128,11 +128,9 @@ with sync_playwright() as p:
             home_texts = []
             away_texts = []
             
-            # 💡 【視覚的・構造的アプローチへの根本変更】
-            # 表（table）の行（tr）を走査し、左側のセル（ピンク）と右側のセル（ブルー）を完全に分けて回収
+            # 💡 【本線ロジック】行（tr）を走査し、左セル（HOME）と右セル（AWAY）を完全分離
             for tr in soup.find_all('tr'):
                 tds = tr.find_all('td')
-                # 左右に並ぶ2カラム構造のテーブルセルを検出
                 if len(tds) >= 2:
                     td_left = tds[0].get_text().strip().replace('\n', ' ')
                     td_right = tds[1].get_text().strip().replace('\n', ' ')
@@ -142,24 +140,23 @@ with sync_playwright() as p:
                     if "/" in td_right and re.search(r"\d+-\d+", td_right):
                         away_texts.append(td_right)
             
-            # 💡 もし上のtable/td構造で拾えなかった場合の、li要素のクラス名（背景色）バックアップ判定
+            # 💡 【バックアップ】万が一tableで拾えなかった場合、liのクラス属性（背景色）から安全に拾う（エラー修正済）
             if not home_texts or not away_texts:
                 home_texts = []
                 away_texts = []
                 for li in soup.find_all('li'):
                     txt = li.get_text().strip().replace('\n', ' ')
                     if "/" in txt and re.search(r"\d+-\d+", txt):
-                        # トトワンの背景色クラス名（代表的なピンク/ブルーの判定、またはカラム属性）
-                        # クラス名に 'home' や 'pink'、あるいは左側を指す属性があればHOMEに入れる
-                        cls = li.get_attr_list('class')
-                        cls_str = "".join(cls) if cls else ""
+                        # 安全にクラス名を取得（文字列化）
+                        cls_list = li.get('class', [])
+                        cls_str = "".join(cls_list) if isinstance(cls_list, list) else str(cls_list)
                         
                         if 'home' in cls_str or 'pink' in cls_str:
                             home_texts.append(txt)
                         elif 'away' in cls_str or 'blue' in cls_str:
                             away_texts.append(txt)
             
-            # 💡 最終防衛ライン（万が一どちらかが空になった場合の安全な機械的2等分）
+            # 💡 【最終防衛】どちらも空なら機械的2等分
             if not home_texts or not away_texts:
                 all_lis = []
                 for li in soup.find_all('li'):
@@ -176,7 +173,6 @@ with sync_playwright() as p:
             away_status, away_coef, away_detail = analyze_recent_4(away_texts, away_team, is_away_top5, match_list)
             
         except Exception as e:
-            # ⚠️ f-stringの中でのバックスラッシュを排除した安全なエラーログ出力
             err_msg = str(e).replace('\n', ' ')
             print(f"   ⚠️ エラー(試合No.{match_no}): {err_msg}")
             home_status, home_coef, home_detail = "普通", 0.0, "エラーにより判定不能"
@@ -193,8 +189,8 @@ with sync_playwright() as p:
         h_tag = " [★現在1~5位]" if is_home_top5 else ""
         a_tag = " [★現在1~5位]" if is_away_top5 else ""
         
-        print(f"   🏠 HOME {home_team}{h_tag}: {home_detail}")
-        print(f"   🚀 AWAY {away_team}{a_tag}: {away_detail}")
+        print(f"   🏠 HOME {home_team}{h_tag}: {home_detail} -> 判定:{home_status} ({home_coef})")
+        print(f"   🚀 AWAY {away_team}{a_tag}: {away_detail} -> 判定:{away_status} ({away_coef})")
         print("-" * 50)
         
     browser.close()
@@ -203,4 +199,4 @@ with sync_playwright() as p:
 with open('data.json', 'w', encoding='utf-8') as f:
     json.dump(match_list, f, ensure_ascii=False, indent=4)
 
-print("💾 [teamCondition.py] 背景・構造分離型（直近4試合）にて、data.json を最終保存しました！")
+print("💾 [teamCondition.py] エラー修正・カラム構造分離型にて、data.json を最終保存しました！")
