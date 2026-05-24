@@ -5,7 +5,7 @@ import time
 from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
 
-print("3️⃣ [teamCondition.py] 直近5試合のコンディションを計算します（上位チームは救済対象外）...")
+print("3️⃣ [teamCondition.py] スコア（数字）基準で直近5試合のコンディションを計算します...")
 
 # 1. 既存の data.json を読み込む
 if not os.path.exists('data.json'):
@@ -15,74 +15,84 @@ if not os.path.exists('data.json'):
 with open('data.json', 'r', encoding='utf-8') as f:
     match_list = json.load(f)
 
-# 2. 現在の「真の1〜5位チーム」をデータから正しく抽出
-top5_teams = set()
-for m in match_list:
-    # 文字列の可能性を考慮して判定
-    if "homeRank" in m and m["homeRank"] is not None:
-        try:
-            if 1 <= int(m["homeRank"]) <= 5:
-                top5_teams.add(m["homeTeam"])
-        except ValueError:
-            pass
-    if "awayRank" in m and m["awayRank"] is not None:
-        try:
-            if 1 <= int(m["awayRank"]) <= 5:
-                top5_teams.add(m["awayTeam"])
-        except ValueError:
-            pass
-
-print(f"📊 現在の1〜5位チーム（自身がこれに該当する場合は救済措置なし）: {list(top5_teams)}")
-
 # 固定の13試合IDリスト
 match_ids = [27736, 27737, 27738, 27739, 27740, 27741, 27742, 27743, 27744, 27745, 27746, 27747, 27748]
 
-def analyze_recent_5(lines, team_name):
+def get_top5_status(team_name, match_list):
+    """対象チームが現在1〜5位の上位チームであるかを厳密に判定"""
+    for m in match_list:
+        if m["homeTeam"] == team_name and "homeRank" in m and m["homeRank"] is not None:
+            if 1 <= int(m["homeRank"]) <= 5: return True
+        if m["awayTeam"] == team_name and "awayRank" in m and m["awayRank"] is not None:
+            if 1 <= int(m["awayRank"]) <= 5: return True
+    return False
+
+def check_if_opponent_is_top5(opp_name, match_list):
+    """対戦相手のチーム名が現在1〜5位かを判定"""
+    for m in match_list:
+        if m["homeTeam"] in opp_name and "homeRank" in m and m["homeRank"] is not None:
+            if 1 <= int(m["homeRank"]) <= 5: return True
+        if m["awayTeam"] in opp_name and "awayRank" in m and m["awayRank"] is not None:
+            if 1 <= int(m["awayRank"]) <= 5: return True
+    return False
+
+def parse_team_table_lines(soup, is_home=True):
     """
-    直近5試合のテキストリストから判定と係数を算出する関数
+    トトワンのHTMLから、HOME側(左セル)またはAWAY側(右セル)の戦績テキスト行を正確に分離して回収
+    """
+    lines = []
+    # ページ内のすべてのテーブル行(tr)を走査
+    for tr in soup.find_all('tr'):
+        cells = tr.find_all('td')
+        # 左右にセルが並んでいる成績テーブルを対象にする
+        if len(cells) >= 2:
+            idx = 0 if is_home else 1
+            txt = cells[idx].get_text().strip()
+            
+            # スコアの数字パターン（例：1-1 や 0-2）が含まれている行だけをターゲットにする
+            if re.search(r"\d+-\d+", txt) and "/" in txt:
+                if txt not in lines:
+                    lines.append(txt)
+    return lines
+
+def analyze_recent_5(lines, team_name, is_self_top5, match_list):
+    """
+    〇●△マークは無視し、スコアの数字だけで勝・分・敗を再判定して計算する関数
     """
     wins, draws, losses, tough_losses = 0, 0, 0, 0
-    valid_lines = []
+    processed_count = 0
     
-    # 〇●△が含まれる有効な行だけを抽出
-    for line in lines:
-        txt = line.get_text().strip()
-        if any(s in txt for s in ["〇", "●", "△"]):
-            valid_lines.append(txt)
-            
-    # 直近5試合分だけを精査
-    for txt in valid_lines[:5]:
-        match_symbol = re.search(r"([〇●△])", txt)
+    # 抽出した行の上から5試合分だけをループ
+    for txt in lines[:5]:
         score_match = re.search(r"(\d+)-(\d+)", txt)
-        
-        if not match_symbol:
+        if not score_match:
             continue
             
-        symbol = match_symbol.group(1)
-        if symbol == "〇":
+        processed_count += 1
+        my_score = int(score_match.group(1))   # 自チームの得点
+        opp_score = int(score_match.group(2))  # 相手チームの得点
+        
+        # 💡 マークではなく「スコアの数字」だけで勝敗をガチ判定する
+        if my_score > opp_score:
             wins += 1
-        elif symbol == "△":
+        elif my_score == opp_score:
             draws += 1
-        elif symbol == "●":
+        else:
             losses += 1
             
-            # 【裏ロジック用カウント】
-            # ただし、自分自身が1〜5位のチームである場合は、対戦相手判定（救済数カウント）は行わない（スキップ）
-            if team_name in top5_teams:
-                continue
-                
-            if score_match:
-                my_score = int(score_match.group(1))
-                opp_score = int(score_match.group(2))
-                # 負け（●）の時は相手の点数が高い。差が1なら1点差負け
-                if (opp_score - my_score) == 1:
-                    # 対戦相手が現在の1〜5位チームに含まれているか
-                    for top_team in top5_teams:
-                        if top_team in txt:
-                            tough_losses += 1
-                            break
+            # 【裏ロジック救済判定】
+            # 自分自身が1〜5位のチームでなく、かつ「1点差負け」の場合のみチェック
+            if not is_self_top5 and (opp_score - my_score) == 1:
+                # スコアより前の部分に書かれている対戦相手のテキストを取得
+                opp_part = txt.split(score_match.group(0))[0]
+                if check_if_opponent_is_top5(opp_part, match_list):
+                    tough_losses += 1
 
-    # 1〜5の基本ルール判定（これは1〜5位チームであっても全員一律で適用）
+    # 万が一データが1試合も引っかからなかった場合の安全弁
+    if processed_count == 0:
+        return "普通", 0.0, "0勝0分0敗(スコアパース空振り)"
+
+    # 1〜5の基本ルール判定
     if wins >= 4:
         status = "良好"
     elif wins == 3:
@@ -94,14 +104,14 @@ def analyze_recent_5(lines, team_name):
     else:
         status = "悪化"
         
-    # 裏ロジック救済の発動（自分自身が1〜5位のチームは、tough_lossesが常に0なのでここは発動しません）
-    if status == "悪化":
+    # 裏ロジック救済の発動
+    if status == "悪化" and not is_self_top5:
         if wins == 0 and tough_losses >= 3:
             status = "普通"
-            print(f"   ✨ 救済発動 [{team_name}]: 0勝ですが上位に1点差負けが{tough_losses}試合あるため『普通』に引き上げ")
+            print(f"   ✨ 救済発動 [{team_name}]: スコア上0勝ですが上位に1点差負けが{tough_losses}試合あるため『普通』に引き上げ")
         elif wins > 0 and tough_losses >= 2:
             status = "普通"
-            print(f"   ✨ 救済発動 [{team_name}]: {wins}勝ですが上位に1点差負けが{tough_losses}試合あるため『普通』に引き上げ")
+            print(f"   ✨ 救済発動 [{team_name}]: スコア上{wins}勝ですが上位に1点差負けが{tough_losses}試合あるため『普通』に引き上げ")
 
     # 係数マッピング
     coef = 0.0
@@ -110,10 +120,10 @@ def analyze_recent_5(lines, team_name):
     elif status == "悪化":
         coef = -0.5
         
-    return status, coef, f"{wins}勝{draws}分{losses}敗(上位への1点差負け:{tough_losses}試合)"
+    return status, coef, f"{wins}勝{draws}分{losses}敗(スコア基準 / 上位への1点差負け:{tough_losses}試合)"
 
 
-# 3. スクレイピング処理
+# 3. スクレイピングメイン処理
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True)
     
@@ -136,24 +146,17 @@ with sync_playwright() as p:
             html_content = page.content()
             soup = BeautifulSoup(html_content, "html.parser")
             
-            home_lines = []
-            away_lines = []
+            # 自分自身が1〜5位のチームかどうかのフラグ
+            is_home_top5 = get_top5_status(match_data['homeTeam'], match_list)
+            is_away_top5 = get_top5_status(match_data['awayTeam'], match_list)
             
-            # トトワンの「今シーズンの成績」テーブル行をパース
-            for tr in soup.find_all('tr'):
-                cells = tr.find_all('td')
-                if len(cells) >= 2:
-                    h_text = cells[0].get_text().strip()
-                    a_text = cells[1].get_text().strip()
-                    
-                    if any(x in h_text for x in ["〇", "●", "△"]) or "/" in h_text:
-                        home_lines.append(cells[0])
-                    if any(x in a_text for x in ["〇", "●", "△"]) or "/" in a_text:
-                        away_lines.append(cells[1])
-                        
-            # 各チームの判定を実行
-            home_status, home_coef, home_detail = analyze_recent_5(home_lines, match_data['homeTeam'])
-            away_status, away_coef, away_detail = analyze_recent_5(away_lines, match_data['awayTeam'])
+            # 左カラム(HOME)と右カラム(AWAY)のテキスト行をそれぞれ独立して取得
+            home_lines = parse_team_table_lines(soup, is_home=True)
+            away_lines = parse_team_table_lines(soup, is_home=False)
+            
+            # スコアベースでの戦績分析を実行
+            home_status, home_coef, home_detail = analyze_recent_5(home_lines, match_data['homeTeam'], is_home_top5, match_list)
+            away_status, away_coef, away_detail = analyze_recent_5(away_lines, match_data['awayTeam'], is_away_top5, match_list)
             
         except Exception as e:
             print(f"   ⚠️ エラー(試合No.{match_no}): {e}")
@@ -162,14 +165,17 @@ with sync_playwright() as p:
         finally:
             context.close()
             
-        # データのマージ
+        # JSONデータに反映
         match_data["homeCondition"] = home_status
         match_data["homeConditionCoef"] = home_coef
         match_data["awayCondition"] = away_status
         match_data["awayConditionCoef"] = away_coef
         
-        print(f"   🏠 HOME {match_data['homeTeam']}: {home_detail} -> 判定:{home_status} ({home_coef})")
-        print(f"   🚀 AWAY {match_data['awayTeam']}: {away_detail} -> 判定:{away_status} ({away_coef})")
+        h_tag = " [★現在1~5位]" if is_home_top5 else ""
+        a_tag = " [★現在1~5位]" if is_away_top5 else ""
+        
+        print(f"   🏠 HOME {match_data['homeTeam']}{h_tag}: {home_detail} -> 判定:{home_status} ({home_coef})")
+        print(f"   🚀 AWAY {match_data['awayTeam']}{a_tag}: {away_detail} -> 判定:{away_status} ({away_coef})")
         print("-" * 50)
         
     browser.close()
@@ -178,4 +184,4 @@ with sync_playwright() as p:
 with open('data.json', 'w', encoding='utf-8') as f:
     json.dump(match_list, f, ensure_ascii=False, indent=4)
 
-print("💾 [teamCondition.py] 正しい条件を反映し、data.json を最終保存しました！")
+print("💾 [teamCondition.py] スコア数字による勝敗判定に切り替え、data.json を最終保存しました！")
