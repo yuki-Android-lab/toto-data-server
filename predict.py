@@ -12,32 +12,33 @@ with open('data.json', 'r', encoding='utf-8') as f:
 
 def calculate_probability(home_pt, away_pt):
     """
-    ポイント差に応じて、引き分け(0)の確率が最大35%まで自動変動する関数
+    最後の%直いじりを廃止し、ポイント比率を100%ストレートに配分する関数。
+    ホームアドバンテージはあらかじめpt側に織り込む（または純粋比率にする）ため、
+    実力差があればアウェイ勝ち(2)がしっかり出現します。
     """
-    # 2チームの純粋なポイント差
-    pt_diff = home_pt - away_pt
+    # ホームチームにのみ、地元の利として「+15pt」のホームアドバンテージをはじめに付与
+    # これにより、％の段階で歪める必要がなくなります
+    h_pt_real = home_pt + 15
+    a_pt_real = away_pt
+    
+    total_pt = h_pt_real + a_pt_real
+    
+    # 2チームのポイント差
+    pt_diff = h_pt_real - a_pt_real
     abs_diff = abs(pt_diff)
     
-    # 【引き分け動的ロジック】
-    # 互角(差が0)の時に最大値35%。差が開くほど、引き分け率を最大15%まで減衰させる
-    d_pct = max(15, int(35 - (abs_diff * 0.4)))
+    # 引き分け(0)の確率（互角の時に最大33%、大差の時は15%へ動的に減らす）
+    d_pct = max(15, int(33 - (abs_diff * 0.3)))
     
-    # 残りの％を、ホームとアウェイのポイント比率で分配
+    # 残りの確率を、アドバンテージ込みのポイント比率で「100%に対してストレートに」分配
     remaining = 100 - d_pct
-    total_pt = home_pt + away_pt
-    h_pure_pct = int(remaining * (home_pt / total_pt))
-    a_pure_pct = remaining - h_pure_pct
     
-    # 最後の微調整：ホームアドバンテージとして一律3%をアウェイからホームへ
-    if a_pure_pct > 3:
-        h_pct = h_pure_pct + 3
-        a_pct = a_pure_pct - 3
-    else:
-        h_pct = h_pure_pct
-        a_pct = a_pure_pct
-        
+    # ここで引き算・足し算の縮んだ分母ではなく、純粋な比率で配分
+    h_pct = int(remaining * (h_pt_real / total_pt))
+    a_pct = remaining - h_pct
+    
     return h_pct, d_pct, a_pct
-
+    
 def judge_forecast(h_pct, d_pct, a_pct):
     """確率から本命と対抗をジャッジする関数（閾値10%で拮抗時は2択化）"""
     pcts = [("1", h_pct), ("0", d_pct), ("2", a_pct)]
