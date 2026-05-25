@@ -12,41 +12,32 @@ with open('data.json', 'r', encoding='utf-8') as f:
 
 def calculate_probability(home_pt, away_pt):
     """
-    【完全リアル版】
-    Jリーグの平均統計（ホーム有利）をベースにし、
-    両チームの純粋なポイント比率を『掛け算』して確率を伸縮させる完璧な数式。
-    これにより、アウェイが強い時は確実に「2」が本命になります。
+    【完全フラット・リアル分配版】
+    初期値を均等にすることで、アウェイが強い試合では確実に「2」が本命になります。
+    最後にJリーグのリアルなホームアドバンテージ分（3%）だけを微調整します。
     """
-    # 1. Jリーグの歴史的な「基本勝率（ホーム有利ベース）」を初期値にする
-    #    実力が完全に互角（ptが同じ）なら、自動的にこのリアルな確率になります
-    base_h = 41.0
-    base_d = 26.0
-    base_a = 33.0
+    # 1. まず引き分け（0）の確率を、pt差に応じて動的に決める（互角なら32%、大差なら15%）
+    pt_diff = home_pt - away_pt
+    abs_diff = abs(pt_diff)
+    d_pct = max(15, int(32 - (abs_diff * 0.4)))
     
-    # 2. 両チームの純粋な実力比率（比率の平均を1.0とする）
+    # 2. 残りの確率（例：68%など）を、まずはホーム・アウェイの「純粋な実力比率」だけで完全にフラットに分ける！
+    remaining = 100 - d_pct
     total_pt = home_pt + away_pt
-    h_ratio = (home_pt / total_pt) * 2.0  # 互角なら 1.0
-    a_ratio = (away_pt / total_pt) * 2.0  # 互角なら 1.0
     
-    # 3. 基本勝率に対して、チームの地力を『掛け算』で作用させる
-    #    アウェイチームが圧倒的に強い（a_ratioがデカい）時は、ホームのアドバンテージを力ずくで叩き潰せます
-    h_pct = int(base_h * h_ratio)
-    a_pct = int(base_a * a_ratio)
+    h_pure_pct = int(remaining * (home_pt / total_pt))
+    a_pure_pct = remaining - h_pure_pct
     
-    # 4. 引き分けは、実力が拮抗している（比率が1.0に近い）ほど高く、大差なら低くなるよう補正
-    pt_diff_ratio = abs(home_pt - away_pt) / total_pt
-    d_pct = int(base_d * (1.0 - pt_diff_ratio))
-    d_pct = max(12, d_pct)  # 最低でも12%は確保
-    
-    # 5. 合計が100%になるように綺麗に端数を丸める
-    total_pct = h_pct + d_pct + a_pct
-    if total_pct != 100:
-        h_pct = int(h_pct * (100 / total_pct))
-        d_pct = int(d_pct * (100 / total_pct))
-        a_pct = 100 - (h_pct + d_pct)
+    # 3. 【ここが重要】最後の最後に、リアルな「ホームの利」として【3%】だけをアウェイからホームに移動する
+    #    この方法なら、アウェイが実力で4%以上勝っていれば、3%引かれても「アウェイ本命(2)」が確実に残ります！
+    if a_pure_pct > 3:
+        h_pct = h_pure_pct + 3
+        a_pct = a_pure_pct - 3
+    else:
+        h_pct = h_pure_pct
+        a_pct = a_pure_pct
         
     return h_pct, d_pct, a_pct
-    
     
 def judge_forecast(h_pct, d_pct, a_pct):
     """確率から本命と対抗をジャッジする関数（閾値10%で拮抗時は2択化）"""
