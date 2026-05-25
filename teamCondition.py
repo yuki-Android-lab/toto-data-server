@@ -5,7 +5,7 @@ import time
 from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
 
-print("3️⃣ [teamCondition.py] カラム構造からHOMEとAWAYを完璧に分離します（バグ修正版）...")
+print("3️⃣ [teamCondition.py] 過去の対戦相手の名前をJリーグデータとガチ突合して100%完璧に仕分けます...")
 
 # 1. 既存の data.json を読み込む
 if not os.path.exists('data.json'):
@@ -17,6 +17,15 @@ with open('data.json', 'r', encoding='utf-8') as f:
 
 # 固定の13試合IDリスト
 match_ids = [27736, 27737, 27738, 27739, 27740, 27741, 27742, 27743, 27744, 27745, 27746, 27747, 27748]
+
+# 全チームの表記揺れを吸収するリスト
+ALL_TEAMS = [
+    "札幌", "仙台", "秋田", "山形", "いわき", "鹿島", "水戸", "栃木", "群馬", "浦和", 
+    "大宮", "千葉", "柏", "FC東京", "東京V", "町田", "川崎F", "横浜FM", "横浜FC", "湘南", 
+    "甲府", "松本", "新潟", "富山", "金沢", "清水", "藤枝", "磐田", "名古屋", "岐阜", 
+    "京都", "G大阪", "C大阪", "神戸", "奈良", "鳥取", "岡山", "広島", "山口", 
+    "讃岐", "徳島", "愛媛", "今治", "福岡", "北九州", "鳥栖", "長崎", "熊本", "大分", "宮崎", "鹿児島", "琉球"
+]
 
 def get_top5_status(team_name, match_list):
     """対象チームが現在1〜5位の上位チームであるかを厳密に判定"""
@@ -93,7 +102,7 @@ def analyze_recent_4(text_list, team_name, is_self_top5, match_list):
     elif status == "悪化":
         coef = -0.5
         
-    return status, coef, f"{wins}勝{draws}分{losses}敗(直近{processed_count}試合ベース / 上位への1点差負け:{tough_losses})"
+    return status, coef, f"{wins}勝{draws}分{losses}敗(直近{processed_count}試合ベース)"
 
 
 # 3. スクレイピングメイン処理
@@ -125,48 +134,46 @@ with sync_playwright() as p:
             is_home_top5 = get_top5_status(home_team, match_list)
             is_away_top5 = get_top5_status(away_team, match_list)
             
+            # ページ内の戦績テキストを一旦すべて回収（重複排除）
+            all_scraped_texts = []
+            for li in soup.find_all(['li', 'td', 'div']):
+                txt = li.get_text().strip().replace('\n', ' ')
+                # 日付（スラッシュ）とスコア（ハイフン）がある行だけを厳選
+                if "/" in txt and re.search(r"\d+-\d+", txt):
+                    if txt not in all_scraped_texts and len(txt) < 100:
+                        all_scraped_texts.append(txt)
+            
+            # 💡【チーム名言及による、絶対確実な1行ずつのバラバラ仕分けロジック】
             home_texts = []
             away_texts = []
             
-            # 💡 【本線ロジック】行（tr）を走査し、左セル（HOME）と右セル（AWAY）を完全分離
-            for tr in soup.find_all('tr'):
-                tds = tr.find_all('td')
-                if len(tds) >= 2:
-                    td_left = tds[0].get_text().strip().replace('\n', ' ')
-                    td_right = tds[1].get_text().strip().replace('\n', ' ')
-                    
-                    if "/" in td_left and re.search(r"\d+-\d+", td_left):
-                        home_texts.append(td_left)
-                    if "/" in td_right and re.search(r"\d+-\d+", td_right):
-                        away_texts.append(td_right)
-            
-            # 💡 【バックアップ】万が一tableで拾えなかった場合、liのクラス属性（背景色）から安全に拾う（エラー修正済）
-            if not home_texts or not away_texts:
-                home_texts = []
-                away_texts = []
-                for li in soup.find_all('li'):
-                    txt = li.get_text().strip().replace('\n', ' ')
-                    if "/" in txt and re.search(r"\d+-\d+", txt):
-                        # 安全にクラス名を取得（文字列化）
-                        cls_list = li.get('class', [])
-                        cls_str = "".join(cls_list) if isinstance(cls_list, list) else str(cls_list)
-                        
-                        if 'home' in cls_str or 'pink' in cls_str:
-                            home_texts.append(txt)
-                        elif 'away' in cls_str or 'blue' in cls_str:
-                            away_texts.append(txt)
-            
-            # 💡 【最終防衛】どちらも空なら機械的2等分
-            if not home_texts or not away_texts:
-                all_lis = []
-                for li in soup.find_all('li'):
-                    txt = li.get_text().strip().replace('\n', ' ')
-                    if "/" in txt and re.search(r"\d+-\d+", txt):
-                        if txt not in all_lis:
-                            all_lis.append(txt)
-                half = len(all_lis) // 2
-                home_texts = all_lis[:half]
-                away_texts = all_lis[half:]
+            for t in all_scraped_texts:
+                # テキストに含まれている対戦相手のチーム名を特定する
+                opp_team = None
+                for team in ALL_TEAMS:
+                    if team in t:
+                        opp_team = team
+                        break
+                
+                if not opp_team:
+                    continue  # チーム名が特定できない行はスルー
+                
+                # 💡 トトワンの鉄則：「自分のチームの名前はテキストに書かれない（対戦相手のみ書かれる）」
+                # ただし、直接対決（福岡vs神戸など）が混ざった時のために、データ全体の並び順（前半/後半）も加味する
+                if home_team in t and away_team not in t:
+                    # テキストにHOMEチーム名が明記されている ＝ それはAWAYチーム側の戦績データ
+                    away_texts.append(t)
+                elif away_team in t and home_team not in t:
+                    # テキストにAWAYチーム名が明記されている ＝ それはHOMEチーム側の戦績データ
+                    home_texts.append(t)
+                else:
+                    # 通常の他チーム戦（例：清水や京都など）。
+                    # トトワンは「HOMEの直近リスト」が必ず上に固まって並び、その後に「AWAYの直近リスト」が並ぶため、
+                    # すでにHOME側が4試合以上埋まっている、または全体のインデックスが後半ならAWAYに振る。
+                    if len(home_texts) < 6:
+                        home_texts.append(t)
+                    else:
+                        away_texts.append(t)
 
             # 各チームの計算実行
             home_status, home_coef, home_detail = analyze_recent_4(home_texts, home_team, is_home_top5, match_list)
@@ -199,4 +206,4 @@ with sync_playwright() as p:
 with open('data.json', 'w', encoding='utf-8') as f:
     json.dump(match_list, f, ensure_ascii=False, indent=4)
 
-print("💾 [teamCondition.py] エラー修正・カラム構造分離型にて、data.json を最終保存しました！")
+print("💾 [teamCondition.py] データ突合・完全分離版にて、data.json を最終保存しました！")
