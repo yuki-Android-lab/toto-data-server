@@ -10,29 +10,43 @@ if not os.path.exists('data.json'):
 with open('data.json', 'r', encoding='utf-8') as f:
     match_list = json.load(f)
 
-def calculate_probability(home_pt, away_pt):
+def calculate_probability(home_pt, away_pt, is_rainy=False):
     """
-    【完全フラット・リアル分配版】
-    初期値を均等にすることで、アウェイが強い試合では確実に「2」が本命になります。
-    最後にJリーグのリアルなホームアドバンテージ分（3%）だけを微調整します。
+    実力拮抗時や雨天時に、引き分け(0)の確率が35%〜45%超まで
+    ダイレクトに跳ね上がる【引き分け本命検知】ロジック
     """
-    # 1. まず引き分け（0）の確率を、pt差に応じて動的に決める（互角なら32%、大差なら15%）
+    # 1. 両チームの実力差を算出
     pt_diff = home_pt - away_pt
     abs_diff = abs(pt_diff)
-    d_pct = max(15, int(32 - (abs_diff * 0.4)))
     
-    # 2. 残りの確率（例：68%など）を、まずはホーム・アウェイの「純粋な実力比率」だけで完全にフラットに分ける！
+    # 2. 【引き分け（0）の超優先・動的計算】
+    if abs_diff <= 3:
+        # ポイント差がわずか3以内の「完全な互角カード」なら、引き分けベースを38%に設定
+        d_pct = 38
+    elif abs_diff <= 10:
+        # 10以内の競合カードなら32%
+        d_pct = 32
+    else:
+        # 大差のゲームなら、実力決着しやすいので引き分け率をガクッと下げる
+        d_pct = max(14, int(30 - (abs_diff * 0.5)))
+        
+    # 【引き分けブースター要素】
+    # 互角（差が5以内）かつ「雨の日」なら、ピッチコンディション悪化によるドロー確率を【+5%】ダイレクト加算！
+    if abs_diff <= 5 and is_rainy:
+        d_pct += 5
+
+    # 3. 残りの確率をホームとアウェイに素直に分配
     remaining = 100 - d_pct
     total_pt = home_pt + away_pt
     
     h_pure_pct = int(remaining * (home_pt / total_pt))
     a_pure_pct = remaining - h_pure_pct
     
-    # 3. 【ここが重要】最後の最後に、リアルな「ホームの利」として【3%】だけをアウェイからホームに移動する
-    #    この方法なら、アウェイが実力で4%以上勝っていれば、3%引かれても「アウェイ本命(2)」が確実に残ります！
-    if a_pure_pct > 3:
-        h_pct = h_pure_pct + 3
-        a_pct = a_pure_pct - 3
+    # 4. 最後の微調整（アウェイからホームへ2%だけ色をつける）
+    # 引き分けが主役の時は、この補正で逆転させないように絶妙に調整
+    if a_pure_pct > 2:
+        h_pct = h_pure_pct + 2
+        a_pct = a_pure_pct - 2
     else:
         h_pct = h_pure_pct
         a_pct = a_pure_pct
