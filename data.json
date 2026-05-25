@@ -20,8 +20,8 @@
         "awayInjuriesCount": 2,
         "homeCondition": "悪化",
         "homeConditionCoef": -0.5,
-        "awayCondition": "悪化",
-        "awayConditionCoef": -0.5
+        "awayCondition": "普通",
+        "awayConditionCoef": 0.0
     },
     {
         "holdId": 1631,
@@ -42,8 +42,8 @@
         "awayInjuries": "伊藤元太 / 高木和徹 / 市原亮太 / 新井光 / 柴野快仁 / ガブリエル・ゴメス",
         "homeInjuriesCount": 7,
         "awayInjuriesCount": 6,
-        "homeCondition": "普通",
-        "homeConditionCoef": 0.0,
+        "homeCondition": "良好",
+        "homeConditionCoef": 0.2,
         "awayCondition": "普通",
         "awayConditionCoef": 0.0
     },
@@ -66,10 +66,10 @@
         "awayInjuries": "加藤有輝 / 柴田壮介 / 熊田直紀",
         "homeInjuriesCount": 1,
         "awayInjuriesCount": 3,
-        "homeCondition": "普通",
-        "homeConditionCoef": 0.0,
-        "awayCondition": "悪化",
-        "awayConditionCoef": -0.5
+        "homeCondition": "悪化",
+        "homeConditionCoef": -0.5,
+        "awayCondition": "普通",
+        "awayConditionCoef": 0.0
     },
     {
         "holdId": 1631,
@@ -92,8 +92,8 @@
         "awayInjuriesCount": 8,
         "homeCondition": "良好",
         "homeConditionCoef": 0.2,
-        "awayCondition": "悪化",
-        "awayConditionCoef": -0.5
+        "awayCondition": "良好",
+        "awayConditionCoef": 0.2
     },
     {
         "holdId": 1631,
@@ -140,8 +140,8 @@
         "awayInjuriesCount": 6,
         "homeCondition": "普通",
         "homeConditionCoef": 0.0,
-        "awayCondition": "普通",
-        "awayConditionCoef": 0.0
+        "awayCondition": "良好",
+        "awayConditionCoef": 0.2
     },
     {
         "holdId": 1631,
@@ -162,10 +162,10 @@
         "awayInjuries": "奥田勇斗 / 福井光輝 / エゼモクェ・チメヅェ海 / 鷹啄トラビス / 阪田澪哉 / ルーカス・フェルナンデス / イェンギ・クシニ",
         "homeInjuriesCount": 3,
         "awayInjuriesCount": 7,
-        "homeCondition": "悪化",
-        "homeConditionCoef": -0.5,
-        "awayCondition": "普通",
-        "awayConditionCoef": 0.0
+        "homeCondition": "普通",
+        "homeConditionCoef": 0.0,
+        "awayCondition": "悪化",
+        "awayConditionCoef": -0.5
     },
     {
         "holdId": 1631,
@@ -186,8 +186,8 @@
         "awayInjuries": "木村凌也 / トーマス・デン / 渡邊泰基 / 鈴木冬一 / 松原健 / 遠野大弥",
         "homeInjuriesCount": 3,
         "awayInjuriesCount": 6,
-        "homeCondition": "普通",
-        "homeConditionCoef": 0.0,
+        "homeCondition": "悪化",
+        "homeConditionCoef": -0.5,
         "awayCondition": "普通",
         "awayConditionCoef": 0.0
     },
@@ -234,8 +234,8 @@
         "awayInjuries": "鈴木大輔 / 鳥海晃司 / 植田悠太 / 小林祐介 / 石川大地 / カルリーニョス・ジュニオ",
         "homeInjuriesCount": 6,
         "awayInjuriesCount": 6,
-        "homeCondition": "悪化",
-        "homeConditionCoef": -0.5,
+        "homeCondition": "良好",
+        "homeConditionCoef": 0.2,
         "awayCondition": "普通",
         "awayConditionCoef": 0.0
     },
@@ -260,8 +260,8 @@
         "awayInjuriesCount": 6,
         "homeCondition": "普通",
         "homeConditionCoef": 0.0,
-        "awayCondition": "普通",
-        "awayConditionCoef": 0.0
+        "awayCondition": "良好",
+        "awayConditionCoef": 0.2
     },
     {
         "holdId": 1631,
@@ -282,10 +282,10 @@
         "awayInjuries": "福岡将太 / 佐々木翔悟 / イッサム・ジェバリ / 植中朝日 / 半田陸 / 横井佑弥 / 藤本祥輝 / 林大地",
         "homeInjuriesCount": 4,
         "awayInjuriesCount": 8,
-        "homeCondition": "普通",
-        "homeConditionCoef": 0.0,
-        "awayCondition": "悪化",
-        "awayConditionCoef": -0.5
+        "homeCondition": "悪化",
+        "homeConditionCoef": -0.5,
+        "awayCondition": "普通",
+        "awayConditionCoef": 0.0
     },
     {
         "holdId": 1631,
@@ -306,9 +306,9 @@
         "awayInjuries": "相田勇樹 / 江﨑巧朗 / 西久保駿介",
         "homeInjuriesCount": 8,
         "awayInjuriesCount": 3,
-        "homeCondition": "悪化",
-        "homeConditionCoef": -0.5,
-        "awayCondition": "普通",
-        "awayConditionCoef": 0.0
+        "homeCondition": "普通",
+        "homeConditionCoef": 0.0,
+        "awayCondition": "悪化",
+        "awayConditionCoef": -0.5
     }
 ]
