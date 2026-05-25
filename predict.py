@@ -121,7 +121,7 @@ for m in match_list:
     h_pt_sunny = max(10, h_pt_sunny)
     a_pt_sunny = max(10, a_pt_sunny)
     
-    h_pct_s, d_pct_s, a_pct_s = calculate_probability(h_pt_sunny, a_pt_sunny)
+    h_pct_s, d_pct_s, a_pct_s = calculate_probability(h_pt_sunny, a_pt_sunny, is_rainy=False)
     forecast_sunny = judge_forecast(h_pct_s, d_pct_s, a_pct_s)
 
     # ==========================================
@@ -152,7 +152,7 @@ for m in match_list:
     h_pt_rainy = max(10, h_pt_rainy)
     a_pt_rainy = max(10, a_pt_rainy)
     
-    h_pct_r, d_pct_r, a_pct_r = calculate_probability(h_pt_rainy, a_pt_rainy)
+    h_pct_r, d_pct_r, a_pct_r = calculate_probability(h_pt_rainy, a_pt_rainy, is_rainy=True)
     forecast_rainy = judge_forecast(h_pct_r, d_pct_r, a_pct_r)
 
     # ==========================================
