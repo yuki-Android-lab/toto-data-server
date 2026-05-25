@@ -47,6 +47,10 @@ jobs:
         run: |
           python teamCondition.py
           
+      - name: 3.9 予測計算エンジンの実行
+        run: |
+          python predict.py
+          
       - name: 4. 生成されたdata.jsonをリポジトリに自動コミット・プッシュ
         run: |
           git config --local user.name "github-actions[bot]"
