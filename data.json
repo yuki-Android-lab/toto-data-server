@@ -70,11 +70,11 @@
             "homePt": 63,
             "awayPt": 60
         },
-        "forecastRainy": "0(1)",
+        "forecastRainy": "0",
         "forecastRainyDetails": {
-            "homePct": 33,
-            "drawPct": 38,
-            "awayPct": 29,
+            "homePct": 30,
+            "drawPct": 43,
+            "awayPct": 27,
             "homePt": 61.0,
             "awayPt": 60.0
         }
@@ -110,11 +110,11 @@
             "homePt": 60,
             "awayPt": 66
         },
-        "forecastRainy": "0(1)",
+        "forecastRainy": "0",
         "forecastRainyDetails": {
-            "homePct": 32,
-            "drawPct": 38,
-            "awayPct": 30,
+            "homePct": 29,
+            "drawPct": 43,
+            "awayPct": 28,
             "homePt": 60.0,
             "awayPt": 63.0
         }
@@ -150,11 +150,11 @@
             "homePt": 60,
             "awayPt": 66
         },
-        "forecastRainy": "0(1)",
+        "forecastRainy": "0",
         "forecastRainyDetails": {
-            "homePct": 32,
-            "drawPct": 38,
-            "awayPct": 30,
+            "homePct": 29,
+            "drawPct": 43,
+            "awayPct": 28,
             "homePt": 60.0,
             "awayPt": 63.0
         }
@@ -230,11 +230,11 @@
             "homePt": 60,
             "awayPt": 66
         },
-        "forecastRainy": "0(1)",
+        "forecastRainy": "0",
         "forecastRainyDetails": {
-            "homePct": 32,
-            "drawPct": 38,
-            "awayPct": 30,
+            "homePct": 29,
+            "drawPct": 43,
+            "awayPct": 28,
             "homePt": 60.0,
             "awayPt": 63.0
         }
@@ -270,11 +270,11 @@
             "homePt": 66,
             "awayPt": 60
         },
-        "forecastRainy": "0(1)",
+        "forecastRainy": "0",
         "forecastRainyDetails": {
-            "homePct": 33,
-            "drawPct": 38,
-            "awayPct": 29,
+            "homePct": 31,
+            "drawPct": 43,
+            "awayPct": 26,
             "homePt": 63.0,
             "awayPt": 60.0
         }
@@ -310,11 +310,11 @@
             "homePt": 60,
             "awayPt": 63
         },
-        "forecastRainy": "0(1)",
+        "forecastRainy": "0",
         "forecastRainyDetails": {
-            "homePct": 32,
-            "drawPct": 38,
-            "awayPct": 30,
+            "homePct": 30,
+            "drawPct": 43,
+            "awayPct": 27,
             "homePt": 60.0,
             "awayPt": 61.0
         }
@@ -350,11 +350,11 @@
             "homePt": 60,
             "awayPt": 63
         },
-        "forecastRainy": "0(1)",
+        "forecastRainy": "0",
         "forecastRainyDetails": {
-            "homePct": 32,
-            "drawPct": 38,
-            "awayPct": 30,
+            "homePct": 30,
+            "drawPct": 43,
+            "awayPct": 27,
             "homePt": 60.0,
             "awayPt": 61.0
         }
@@ -510,11 +510,11 @@
             "homePt": 60,
             "awayPt": 63
         },
-        "forecastRainy": "0(1)",
+        "forecastRainy": "0",
         "forecastRainyDetails": {
-            "homePct": 32,
-            "drawPct": 38,
-            "awayPct": 30,
+            "homePct": 30,
+            "drawPct": 43,
+            "awayPct": 27,
             "homePt": 60.0,
             "awayPt": 61.0
         }
