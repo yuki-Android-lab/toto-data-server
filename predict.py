@@ -1,7 +1,7 @@
 import json
 import os
 
-print("4️⃣ [predict.py] 【実力差重視・得失点連動版】天候予測を計算中...")
+print("4️⃣ [predict.py] 【引き分け確率動的連動・雨天ロジック修正版】計算中...")
 
 if not os.path.exists('data.json'):
     print("❌ data.json が見つかりません！")
@@ -12,19 +12,23 @@ with open('data.json', 'r', encoding='utf-8') as f:
 
 def calculate_probability(home_pt, away_pt):
     """
-    ポイント比率を素直に反映し、極端なホーム偏りを修正した関数
+    ポイント差に応じて、引き分け(0)の確率が最大35%まで自動変動する関数
     """
-    total_pt = home_pt + away_pt
+    # 2チームの純粋なポイント差
+    pt_diff = home_pt - away_pt
+    abs_diff = abs(pt_diff)
     
-    # 1. まず引き分け（0）の確率を全体の「28%」としてどっしり固定
-    d_pct = 28
+    # 【引き分け動的ロジック】
+    # 互角(差が0)の時に最大値35%。差が開くほど、引き分け率を最大15%まで減衰させる
+    d_pct = max(15, int(35 - (abs_diff * 0.4)))
     
-    # 2. 残りの「72%」を、ホームとアウェイの純粋なポイント比率で分配
+    # 残りの％を、ホームとアウェイのポイント比率で分配
     remaining = 100 - d_pct
+    total_pt = home_pt + away_pt
     h_pure_pct = int(remaining * (home_pt / total_pt))
     a_pure_pct = remaining - h_pure_pct
     
-    # 3. 最後に「ホームアドバンテージ」としてアウェイからホームへ【3%】だけ移す
+    # 最後の微調整：ホームアドバンテージとして一律3%をアウェイからホームへ
     if a_pure_pct > 3:
         h_pct = h_pure_pct + 3
         a_pct = a_pure_pct - 3
@@ -35,15 +39,15 @@ def calculate_probability(home_pt, away_pt):
     return h_pct, d_pct, a_pct
 
 def judge_forecast(h_pct, d_pct, a_pct):
-    """確率から本命と対抗をジャッジする関数（閾値を12%に下げて2択を出やすく調整）"""
+    """確率から本命と対抗をジャッジする関数（閾値10%で拮抗時は2択化）"""
     pcts = [("1", h_pct), ("0", d_pct), ("2", a_pct)]
     sorted_pcts = sorted(pcts, key=lambda x: x[1], reverse=True)
     
     top1_lbl, top1_val = sorted_pcts[0]
     top2_lbl, top2_val = sorted_pcts[1]
     
-    # 差が 12% 以上離れていれば一択、それ未満ならマルチ(2択)
-    if (top1_val - top2_val) >= 12:
+    # 最高確率と2番目の差が10%未満の時はマルチ買い（2択）にする
+    if (top1_val - top2_val) >= 10:
         return top1_lbl
     else:
         return f"{top1_lbl}({top2_lbl})"
@@ -54,7 +58,6 @@ for m in match_list:
     home_team = m["homeTeam"]
     away_team = m["awayTeam"]
     
-    # 基本データの取得（無い場合はデフォルト値）
     h_rank = int(m.get("homeRank", 10)) if m.get("homeRank") is not None else 10
     a_rank = int(m.get("awayRank", 10)) if m.get("awayRank") is not None else 10
     h_days = int(m.get("homeRestDays", 6)) if m.get("homeRestDays") is not None else 6
@@ -62,7 +65,6 @@ for m in match_list:
     h_cond_coef = float(m.get("homeConditionCoef", 0.0))
     a_cond_coef = float(m.get("awayConditionCoef", 0.0))
     
-    # --- 【新規投入】総得点・総失点データの数値化 ---
     h_goal = int(m.get("homeGoal", 0)) if m.get("homeGoal") is not None else 0
     a_goal = int(m.get("awayGoal", 0)) if m.get("awayGoal") is not None else 0
     h_lose = int(m.get("homeLose", 0)) if m.get("homeLose") is not None else 0
@@ -76,28 +78,26 @@ for m in match_list:
     a_df_inj_count = sum(1 for p in a_injuries if isinstance(p, dict) and p.get("pos") in ["DF", "GK"])
 
     # ==========================================
-    # ☀️ 晴れの日の計算ロジック（ベースを50に下げてメリハリを強化）
+    # ☀️ 晴れの日の計算ロジック（ベースを100ptに戻して安定化）
     # ==========================================
-    h_pt_sunny = 50
-    a_pt_sunny = 50
+    h_pt_sunny = 100
+    a_pt_sunny = 100
     
-    # ① 順位差ポイント（1順位＝4ptに大幅強化）
-    if h_rank < a_rank:
-        h_pt_sunny += (a_rank - h_rank) * 4
-    elif a_rank < h_rank:
-        a_pt_sunny += (h_rank - a_rank) * 4
+    # ① 順位差ポイント（1順位＝3pt）
+    if h_rank < a_rank: h_pt_sunny += (a_rank - h_rank) * 3
+    elif a_rank < h_rank: a_pt_sunny += (h_rank - a_rank) * 3
         
-    # ② 【新規】得失点補正（得失点差のリアリティを反映）
-    h_pt_sunny += (h_goal - h_lose) * 2
-    a_pt_sunny += (a_goal - a_lose) * 2
+    # ② 得失点差補正（純粋な得失点差をそのまま反映）
+    h_pt_sunny += (h_goal - h_lose)
+    a_pt_sunny += (a_goal - a_lose)
         
-    # ③ コンディションポイント（ベース50に対して重みを調整）
-    h_pt_sunny += 15 if h_cond_coef > 0 else (-35 if h_cond_coef < 0 else 0)
-    a_pt_sunny += 15 if a_cond_coef > 0 else (-35 if a_cond_coef < 0 else 0)
+    # ③ コンディションポイント
+    h_pt_sunny += 20 if h_cond_coef > 0 else (-40 if h_cond_coef < 0 else 0)
+    a_pt_sunny += 20 if a_cond_coef > 0 else (-40 if a_cond_coef < 0 else 0)
     
     # ④ 主力級怪我人ペナルティ
-    h_pt_sunny -= h_inj_count * 12
-    a_pt_sunny -= a_inj_count * 12
+    h_pt_sunny -= h_inj_count * 15
+    a_pt_sunny -= a_inj_count * 15
     
     # ⑤ 過密日程ペナルティ
     if h_days <= 2: h_pt_sunny -= 10
@@ -110,28 +110,26 @@ for m in match_list:
     forecast_sunny = judge_forecast(h_pct_s, d_pct_s, a_pct_s)
 
     # ==========================================
-    # ☔ 雨の日の計算ロジック
+    # ☔ 雨の日の計算ロジック（異常なポイント高騰を修正）
     # ==========================================
-    h_pt_rainy = 50
-    a_pt_rainy = 50
+    h_pt_rainy = 100
+    a_pt_rainy = 100
     
-    # ① 順位差ポイント（雨の日は影響を「1順位＝2pt」に半減）
-    if h_rank < a_rank:
-        h_pt_rainy += (a_rank - h_rank) * 2
-    elif a_rank < h_rank:
-        a_pt_rainy += (h_rank - a_rank) * 2
+    # ① 順位差ポイント（雨の日は影響を「1順位＝1.5pt」に半減）
+    if h_rank < a_rank: h_pt_rainy += int((a_rank - h_rank) * 1.5)
+    elif a_rank < h_rank: a_pt_rainy += int((h_rank - a_rank) * 1.5)
         
-    # ② 【新規】得失点補正（雨の日は「総失点の少なさ」のみを2倍重視して守備力勝負にする）
-    h_pt_rainy += (50 - h_lose) * 3
-    a_pt_rainy += (50 - a_lose) * 3
+    # ② 得失点補正（雨の日は総得点の影響を無視し、「総失点の少なさ」だけをマイナス加算する）
+    h_pt_rainy -= h_lose * 1.5
+    a_pt_rainy -= a_lose * 1.5
         
-    # ③ コンディションポイント
-    h_pt_rainy += 15 if h_cond_coef > 0 else (-35 if h_cond_coef < 0 else 0)
-    a_pt_rainy += 15 if a_cond_coef > 0 else (-35 if a_cond_coef < 0 else 0)
+    # ③ コンディションポイント（晴れと同様）
+    h_pt_rainy += 20 if h_cond_coef > 0 else (-40 if h_cond_coef < 0 else 0)
+    a_pt_rainy += 20 if a_cond_coef > 0 else (-40 if a_cond_coef < 0 else 0)
     
-    # ④ 主力級怪我人ペナルティ + DF/GKの追加ペナルティ
-    h_pt_rainy -= h_inj_count * 12 + h_df_inj_count * 12
-    a_pt_rainy -= a_inj_count * 12 + a_df_inj_count * 12
+    # ④ 主力級怪我人ペナルティ（雨の日はDF/GKの怪我人ペナルティを2倍重くする）
+    h_pt_rainy -= (h_inj_count * 15 + h_df_inj_count * 15)
+    a_pt_rainy -= (a_inj_count * 15 + a_df_inj_count * 15)
     
     if h_days <= 2: h_pt_rainy -= 10
     if a_days <= 2: a_pt_rainy -= 10
@@ -160,4 +158,4 @@ for m in match_list:
 with open('data.json', 'w', encoding='utf-8') as f:
     json.dump(match_list, f, ensure_ascii=False, indent=4)
 
-print("💾 [predict.py] 得失点データを組み込み、感度を大幅に上げた最新予測を保存しました！")
+print("💾 [predict.py] 引き分け確率の動的連動化、および雨天バグの修正が完了しました！")
