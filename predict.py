@@ -12,45 +12,44 @@ with open('data.json', 'r', encoding='utf-8') as f:
 
 def calculate_probability(home_pt, away_pt, is_rainy=False):
     """
-    実力拮抗時や雨天時に、引き分け(0)の確率が35%〜45%超まで
-    ダイレクトに跳ね上がる【引き分け本命検知】ロジック
+    【J2大混戦＆アウェイ・カウンター特化版】
+    実力が拮抗しているカード（pt差が少ない試合）ほど、
+    「地元ゆえに前がかりになるホーム」をアウェイがカウンターで仕留めるリアルな傾向を再現。
+    引き分け(0)はピンポイントに厳選し、アウェイ勝ち(2)の突き抜け力を大幅に強化しました。
     """
-    # 1. 両チームの実力差を算出
     pt_diff = home_pt - away_pt
     abs_diff = abs(pt_diff)
     
-    # 2. 【引き分け（0）の超優先・動的計算】
-    if abs_diff <= 3:
-        # ポイント差がわずか3以内の「完全な互角カード」なら、引き分けベースを38%に設定
-        d_pct = 38
-    elif abs_diff <= 10:
-        # 10以内の競合カードなら32%
+    # 1. 【引き分け（0）の超厳選化】
+    # 差が「1pt以内」の本当のド泥沼カードだけ32%にし、それ以外はサッと下げて勝敗を促す
+    if abs_diff <= 1:
         d_pct = 32
+    elif abs_diff <= 4:
+        d_pct = 26
     else:
-        # 大差のゲームなら、実力決着しやすいので引き分け率をガクッと下げる
-        d_pct = max(14, int(30 - (abs_diff * 0.5)))
+        d_pct = max(12, int(22 - (abs_diff * 0.4)))
         
-    # 【引き分けブースター要素】
-    # 互角（差が5以内）かつ「雨の日」なら、ピッチコンディション悪化によるドロー確率を【+5%】ダイレクト加算！
-    if abs_diff <= 5 and is_rainy:
-        d_pct += 5
-
-    # 3. 残りの確率をホームとアウェイに素直に分配
+    # 2. 【アウェイ・カウンターブースター（核心部分）】
+    # 基本の配分ウエイトを計算（差の感度を1.5倍に尖らせる）
+    weight_h = home_pt + (pt_diff * 0.5)
+    weight_a = away_pt - (pt_diff * 0.5)
+    
+    # ★ここがJ2混戦・カウンター補正：
+    # ポイント差が「6pt以内」の実力伯仲カードの場合、
+    # アウェイ側に「カウンターの利」として、ウエイト段階で一律【+8pt】の強烈なブーストをかける！
+    # これにより、60pt vs 66pt などの微差でも、アウェイが主役に躍り出ます。
+    if abs_diff <= 6:
+        weight_a += 8
+    
+    weight_h = max(10, weight_h)
+    weight_a = max(10, weight_a)
+    total_weight = weight_h + weight_a
+    
+    # 3. 残りの％を、カウンター利を織り込んだウエイト比率でストレートに分配
     remaining = 100 - d_pct
-    total_pt = home_pt + away_pt
+    h_pct = int(remaining * (weight_h / total_weight))
+    a_pct = remaining - h_pct
     
-    h_pure_pct = int(remaining * (home_pt / total_pt))
-    a_pure_pct = remaining - h_pure_pct
-    
-    # 4. 最後の微調整（アウェイからホームへ2%だけ色をつける）
-    # 引き分けが主役の時は、この補正で逆転させないように絶妙に調整
-    if a_pure_pct > 2:
-        h_pct = h_pure_pct + 2
-        a_pct = a_pure_pct - 2
-    else:
-        h_pct = h_pure_pct
-        a_pct = a_pure_pct
-        
     return h_pct, d_pct, a_pct
     
 def judge_forecast(h_pct, d_pct, a_pct):
