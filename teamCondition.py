@@ -5,7 +5,7 @@ import time
 from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
 
-print("3️⃣ [teamCondition.py] 解析用テキストの抽出とデバッグ出力を実行します...")
+print("3️⃣ [teamCondition.py] 生データ構造のデバッグ出力＆勝敗判定ロジックを実行します...")
 
 # 1. 既存の data.json を読み込む
 if not os.path.exists('data.json'):
@@ -36,12 +36,14 @@ def check_if_opponent_is_top5(opp_name, match_list):
             if 1 <= int(m["awayRank"]) <= 5: return True
     return False
 
-def analyze_recent_4(text_list, team_name, is_self_top5, match_list):
+def analyze_recent_4(text_list, team_name, is_self_top5, match_list, role_label):
     """
-    【4試合割り切り】スコアから勝・分・敗を判定してトレンドを出す
+    【検証用デバッグ機能付き】(H)/(A)を識別し、各試合のパース結果をログに出しながらトレンドを計算
     """
     wins, draws, losses, tough_losses = 0, 0, 0, 0
     processed_count = 0
+    
+    print(f"\n     --- 【{role_label}勝敗判定の内訳ログ: {team_name}】 ---")
     
     for txt in text_list:
         if processed_count >= 4:
@@ -49,28 +51,50 @@ def analyze_recent_4(text_list, team_name, is_self_top5, match_list):
             
         score_match = re.search(r"(\d+)-(\d+)", txt)
         if not score_match:
+            print(f"      [スキップ] スコア未検出: {txt}")
             continue
             
         processed_count += 1
-        my_score = int(score_match.group(1))
-        opp_score = int(score_match.group(2))
+        val_left = int(score_match.group(1))
+        val_right = int(score_match.group(2))
         
+        # (H)か(A)かで自チームの得点を識別
+        if "（A）" in txt or "(A)" in txt:
+            is_home_game = False
+            my_score = val_right
+            opp_score = val_left
+            loc_label = "アウェイ(A)"
+        else:
+            is_home_game = True
+            my_score = val_left
+            opp_score = val_right
+            loc_label = "ホーム(H)"
+            
+        # 勝敗の決定
         if my_score > opp_score:
+            result_str = "○ 勝ち"
             wins += 1
         elif my_score == opp_score:
+            result_str = "△ 引き分け"
             draws += 1
         else:
+            result_str = "● 負け"
             losses += 1
-            
-            # 【裏ロジック救済判定】
+            # 裏ロジック救済判定
             if not is_self_top5 and (opp_score - my_score) == 1:
                 opp_part = txt.split(score_match.group(0))[0]
                 if check_if_opponent_is_top5(opp_part, match_list):
                     tough_losses += 1
+                    result_str += "（★上位への1点差負け・救済対象）"
+
+        # 1試合ずつのパース結果をコンソールに完全表示
+        print(f"      [{processed_count}戦目] 元データ: {txt}")
+        print(f"              解釈: {loc_label} / 自スコア:{my_score}点 vs 相手:{opp_score}点 -> 判定: {result_str}")
 
     if processed_count == 0:
         return "普通", 0.0, "0勝0分0敗(データなし)"
 
+    # トレンド判定基準
     if wins >= 3:
         status = "良好"
     elif wins == 2 and draws == 2:
@@ -80,9 +104,11 @@ def analyze_recent_4(text_list, team_name, is_self_top5, match_list):
     else:
         status = "悪化"
         
+    # 裏ロジック救済
     if status == "悪化" and not is_self_top5:
         if tough_losses >= 2:
             status = "普通"
+            print(f"      ✨ 救済発動 [{team_name}]: 直近4戦で上位へ1点差負けが{tough_losses}試合あるため『普通』に引き上げ")
 
     coef = 0.0
     if status == "良好":
@@ -90,25 +116,14 @@ def analyze_recent_4(text_list, team_name, is_self_top5, match_list):
     elif status == "悪化":
         coef = -0.5
         
-    return status, coef, f"{wins}勝{draws}分{losses}敗(直近{processed_count}試合ベース)"
+    return status, coef, f"{wins}勝{draws}分{losses}敗(直近{processed_count}試合ベース / 救済カウント:{tough_losses})"
 
-
-# Jリーグのチーム名リスト
-ALL_TEAMS = [
-    "札幌", "仙台", "秋田", "山形", "いわき", "鹿島", "水戸", "栃木", "群馬", "浦和", 
-    "大宮", "千葉", "柏", "FC東京", "東京V", "町田", "川崎F", "横浜FM", "横浜FC", "湘南", 
-    "甲府", "松本", "新潟", "富山", "金沢", "清水", "藤枝", "磐田", "名古屋", "岐阜", 
-    "京都", "G大阪", "C大阪", "神戸", "奈良", "鳥取", "岡山", "広島", "山口", 
-    "讃岐", "徳島", "愛媛", "今治", "福岡", "北九州", "鳥栖", "長崎", "熊本", "大分", "宮崎", "鹿児島", "琉球"
-]
 
 # 3. スクレイピングメイン処理
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True)
     
-    # ログが長大になるのを防ぐため、まずは直近でおかしかった「試合No.1〜3」に絞ってデバッグします
-    for i in range(3):
-        match_data = match_list[i]
+    for i, match_data in enumerate(match_list):
         match_no = match_data["matchNo"]
         m_id = match_ids[i]
         
@@ -116,9 +131,10 @@ with sync_playwright() as p:
         away_team = match_data['awayTeam']
         
         target_url = f"https://www.totoone.jp/match/{m_id}"
-        print(f"\n==================================================")
-        print(f"📊 【デバッグ】試合No.{match_no}: {home_team} vs {away_team}")
-        print(f"==================================================")
+        print(f"\n==================================================================================")
+        print(f"📊 試合No.{match_no}: {home_team} vs {away_team}")
+        print(f"🔗 URL: {target_url}")
+        print(f"==================================================================================")
         
         context = browser.new_context(
             viewport={"width": 1280, "height": 1024},
@@ -135,56 +151,50 @@ with sync_playwright() as p:
             is_home_top5 = get_top5_status(home_team, match_list)
             is_away_top5 = get_top5_status(away_team, match_list)
             
-            # 💡 【デバッグ確認用】抽出条件に引っかかるテキストをすべて一旦フラットに並べる
+            # ページ内から戦績テキストを抽出（重複排除）
             all_scraped_texts = []
-            for tag in soup.find_all(['li', 'td', 'div', 'p']):
+            for tag in soup.find_all(['li', 'td', 'div']):
                 txt = tag.get_text().strip().replace('\n', ' ')
                 if "/" in txt and re.search(r"\d+-\d+", txt):
-                    if txt not in all_scraped_texts and len(txt) < 120:
+                    if txt not in all_scraped_texts and len(txt) < 100:
                         all_scraped_texts.append(txt)
             
-            # 🔍 スクレイピングで拾えた生のデータを最優先で全部出力する
-            print(f"🗂️ [生データログ] ページ内から抽出された戦績テキスト（計 {len(all_scraped_texts)} 件）:")
+            # 🔍 【検証デバッグ】ページから引っこ抜いた全データをそのまま表示
+            print(f"🗂️ [生データログ] ページ内から検出された戦績テキスト（計 {len(all_scraped_texts)} 件）:")
             for idx, raw_txt in enumerate(all_scraped_texts):
                 print(f"   [{idx}] {raw_txt}")
             
-            # 仕分け処理（前回のロジックのまま、ログ出力のために一旦通します）
-            home_texts = []
-            away_texts = []
-            for t in all_scraped_texts:
-                opp_team = None
-                for team in ALL_TEAMS:
-                    if team in t:
-                        opp_team = team
-                        break
-                if not opp_team:
-                    continue
-                
-                if home_team in t and away_team not in t:
-                    away_texts.append(t)
-                elif away_team in t and home_team not in t:
-                    home_texts.append(t)
-                else:
-                    if len(home_texts) < 6:
-                        home_texts.append(t)
-                    else:
-                        away_texts.append(t)
-
-            # 🔍 仕分けられた後の最終的な中身もログに出す
-            print(f"\n   🏠 HOME [{home_team}] に振り分けられたテキスト:")
-            for ht in home_texts[:4]: print(f"      -> {ht}")
-            print(f"   🚀 AWAY [{away_team}] に振り分けられたテキスト:")
-            for at in away_texts[:4]: print(f"      -> {at}")
+            # 前半4つをHOME、後半4つをAWAYへ分割
+            home_texts = all_scraped_texts[:4]
+            away_texts = all_scraped_texts[4:8]
             
-            home_status, home_coef, home_detail = analyze_recent_4(home_texts, home_team, is_home_top5, match_list)
-            away_status, away_coef, away_detail = analyze_recent_4(away_texts, away_team, is_away_top5, match_list)
+            # 各チームの計算実行（デバッグ文を内包）
+            home_status, home_coef, home_detail = analyze_recent_4(home_texts, home_team, is_home_top5, match_list, "HOME")
+            away_status, away_coef, away_detail = analyze_recent_4(away_texts, away_team, is_away_top5, match_list, "AWAY")
             
-            print(f"\n   結果 -> HOME: {home_detail} | AWAY: {away_detail}")
+            # 結果の要約出力
+            print(f"\n 📝 【判定結果の確定】")
+            print(f"   🏠 HOME {home_team}{' [★上位]' if is_home_top5 else ''}: {home_detail} -> 判定:{home_status} ({home_coef})")
+            print(f"   🚀 AWAY {away_team}{' [★上位]' if is_away_top5 else ''}: {away_detail} -> 判定:{away_status} ({away_coef})")
             
         except Exception as e:
-            print(f"   ⚠️ エラー: {e}")
+            err_msg = str(e).replace('\n', ' ')
+            print(f"   ⚠️ エラー発生(試合No.{match_no}): {err_msg}")
+            home_status, home_coef, home_detail = "普通", 0.0, "エラーにより判定不能"
+            away_status, away_coef, away_detail = "普通", 0.0, "エラーにより判定不能"
         finally:
             context.close()
-        print("-" * 50)
+            
+        # JSON反映
+        match_data["homeCondition"] = home_status
+        match_data["homeConditionCoef"] = home_coef
+        match_data["awayCondition"] = away_status
+        match_data["awayConditionCoef"] = away_coef
         
     browser.close()
+
+# 4. 保存
+with open('data.json', 'w', encoding='utf-8') as f:
+    json.dump(match_list, f, ensure_ascii=False, indent=4)
+
+print("\n💾 [teamCondition.py] デバッグ完全可視化版にて、data.json を最終保存しました！")
