@@ -13,28 +13,26 @@ with open('data.json', 'r', encoding='utf-8') as f:
 
 def calculate_probability(home_pt, away_pt):
     """
-    ポイントから勝・分・負の確率(%)をサッカーの統計に基づいて正しく算出する関数
+    ポイント比率を素直に反映し、極端なホーム偏りを修正した関数
     """
-    # 2つのチームのポイント比率
     total_pt = home_pt + away_pt
-    h_ratio = home_pt / total_pt
-    a_ratio = away_pt / total_pt
     
-    # 【新ロジック】拮抗している時に引き分け（0）が最大30%になるように綺麗に按分
-    # 基本勝率（アドバンテージ考慮：ホーム38%、アウェイ32%、引き分け30%）
-    # 比率の偏りに応じて、最大35%〜最小15%の範囲で滑らかに変動させます
-    h_pct = int((h_ratio * 0.76) * 100)
-    a_pct = int((a_ratio * 0.64) * 100)
+    # 1. まず引き分け（0）の確率を全体の「28%」としてどっしり固定
+    d_pct = 28
     
-    # 引き分けは残りの％（絶対にマイナスにならないようにガード）
-    d_pct = max(10, 100 - (h_pct + a_pct))
+    # 2. 残りの「72%」を、ホームとアウェイの純粋なポイント比率で分配
+    remaining = 100 - d_pct  # 72
+    h_pure_pct = int(remaining * (home_pt / total_pt))
+    a_pure_pct = remaining - h_pure_pct
     
-    # 最終的な100%調整
-    total_pct = h_pct + a_pct + d_pct
-    if total_pct != 100:
-        h_pct = int(h_pct * (100 / total_pct))
-        a_pct = int(a_pct * (100 / total_pct))
-        d_pct = 100 - (h_pct + a_pct)
+    # 3. 最後に「ホームアドバンテージ」としてアウェイからホームへ【3%】だけ確率を移す
+    # (実力差が僅差のときだけホームが少し有利になり、実力差が大きいときは逆転しない絶妙な塩梅)
+    if a_pure_pct > 3:
+        h_pct = h_pure_pct + 3
+        a_pct = a_pure_pct - 3
+    else:
+        h_pct = h_pure_pct
+        a_pct = a_pure_pct
         
     return h_pct, d_pct, a_pct
 
