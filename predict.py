@@ -1,5 +1,6 @@
 import json
 import os
+import re
 
 print("4️⃣ [predict.py] 【引き分け確率動的連動・雨天ロジック修正版】計算中...")
 
@@ -46,7 +47,6 @@ def calculate_probability(home_pt, away_pt, is_rainy=False):
     h_pct = int(remaining * (weight_h / total_weight))
     a_pct = remaining - h_pct
     
-    # 内部の計算結果を辞書で返す
     calc_details = {
         "d_pct": d_pct,
         "weight_h": weight_h,
@@ -69,60 +69,60 @@ def judge_forecast(h_pct, d_pct, a_pct):
     else:
         return f"{top1_lbl}({top2_lbl})"
 
+def extract_days(interval_str):
+    """「中12日」や「中5日」から数値だけを抜き出す関数"""
+    if not interval_str:
+        return 6
+    match = re.search(r'\d+', str(interval_str))
+    return int(match.group()) if match else 6
+
 # ==========================================
-# 2. 13試合の予測ループ
+# 2. 13試合の予測ループ（JSON完全適合版）
 # ==========================================
 for m in match_list:
     match_no = m["matchNo"]
     home_team = m["homeTeam"]
     away_team = m["awayTeam"]
     
-    # --- 【データ取得ガード】型変換とキー名の揺れ対策 ---
-    h_rank = int(m.get("homeRank") if m.get("homeRank") is not None else 10)
-    a_rank = int(m.get("awayRank") if m.get("awayRank") is not None else 10)
-    h_days = int(m.get("homeRestDays") if m.get("homeRestDays") is not None else 6)
-    a_days = int(m.get("awayRestDays") if m.get("awayRestDays") is not None else 6)
+    # --- 【データ取得部修正】実際のJSONキー名に完全適合 ---
+    h_rank = int(m.get("homeRank", 10))
+    a_rank = int(m.get("awayRank", 10))
     
-    # 調子係数の取得を安全に
-    try:
-        h_cond_coef = float(m.get("homeConditionCoef", 0.0)) if m.get("homeConditionCoef") is not None else 0.0
-        a_cond_coef = float(m.get("awayConditionCoef", 0.0)) if m.get("awayConditionCoef") is not None else 0.0
-    except (ValueError, TypeError):
-        h_cond_coef = 0.0
-        a_cond_coef = 0.0
+    # 「中〇日」の文字列から数値を抽出
+    h_days = extract_days(m.get("homeInterval"))
+    a_days = extract_days(m.get("awayInterval"))
     
-    # 【得失点キー名揺れ対策】
-    h_goal = int(m.get("homeGoal") or m.get("homeGoals") or 0)
-    a_goal = int(m.get("awayGoal") or m.get("awayGoals") or 0)
-    h_lose = int(m.get("homeLose") or m.get("homeLoses") or 0)
-    a_lose = int(m.get("awayLose") or m.get("awayLoses") or 0)
+    # 調子係数
+    h_cond_coef = float(m.get("homeConditionCoef", 0.0))
+    a_cond_coef = float(m.get("awayConditionCoef", 0.0))
     
-    # 【怪我人リスト揺れ対策】
-    h_injuries = m.get("homeInjuries") or m.get("homeInjuryList") or []
-    a_injuries = m.get("awayInjuries") or m.get("awayInjuryList") or []
+    # 得失点（homeGoalsFor / homeGoalsAgainst）
+    h_goal = int(m.get("homeGoalsFor", 0))
+    h_lose = int(m.get("homeGoalsAgainst", 0))
+    a_goal = int(m.get("awayGoalsFor", 0))
+    a_lose = int(m.get("awayGoalsAgainst", 0))
     
-    h_inj_count = len(h_injuries) if isinstance(h_injuries, list) else 0
-    a_inj_count = len(a_injuries) if isinstance(a_injuries, list) else 0
+    # 怪我人数（最初から用意されているCountキーをそのまま使用）
+    h_inj_count = int(m.get("homeInjuriesCount", 0))
+    a_inj_count = int(m.get("awayInjuriesCount", 0))
     
-    # DF/GKの怪我人カウント
+    # DF/GKの怪我人カウント（文字列「 / 」区切りからDF/GKを走査）
+    h_inj_str = m.get("homeInjuries", "")
     h_df_inj_count = 0
-    if isinstance(h_injuries, list):
-        for p in h_injuries:
-            if isinstance(p, dict) and p.get("pos") in ["DF", "GK"]:
-                h_df_inj_count += 1
-            elif isinstance(p, str) and ("DF" in p or "GK" in p):
+    if h_inj_str and isinstance(h_inj_str, str):
+        for p in h_inj_str.split("/"):
+            if "DF" in p or "GK" in p:
                 h_df_inj_count += 1
                 
+    a_inj_str = m.get("awayInjuries", "")
     a_df_inj_count = 0
-    if isinstance(a_injuries, list):
-        for p in a_injuries:
-            if isinstance(p, dict) and p.get("pos") in ["DF", "GK"]:
-                a_df_inj_count += 1
-            elif isinstance(p, str) and ("DF" in p or "GK" in p):
+    if a_inj_str and isinstance(a_inj_str, str):
+        for p in a_inj_str.split("/"):
+            if "DF" in p or "GK" in p:
                 a_df_inj_count += 1
 
     # ==========================================
-    # ☀️ 晴れの日の計算ロジック（復活・格納）
+    # ☀️ 晴れの日の計算ロジック
     # ==========================================
     h_rank_pt_s = (a_rank - h_rank) * 3 if h_rank < a_rank else 0
     a_rank_pt_s = (h_rank - a_rank) * 3 if a_rank < h_rank else 0
@@ -146,7 +146,7 @@ for m in match_list:
     forecast_sunny = judge_forecast(h_pct_s, d_pct_s, a_pct_s)
 
     # ==========================================
-    # ☔ 雨の日の計算ロジック（復活・格納）
+    # ☔ 雨の日の計算ロジック
     # ==========================================
     h_rank_pt_r = int((a_rank - h_rank) * 1.5) if h_rank < a_rank else 0
     a_rank_pt_r = int((h_rank - a_rank) * 1.5) if a_rank < h_rank else 0
@@ -174,10 +174,9 @@ for m in match_list:
     # ==========================================
     print(f"⚽ 試合No.{match_no}: {home_team} vs {away_team}")
     
-    # 1. ☀️ 晴れの内訳
     print(f"  ☀️ 【晴れpt の詳細内訳】(初期値 100pt スタート)")
     print(f"    ・①順位差影響 -> 🏠 {h_rank_pt_s:+}pt / 🚀 {a_rank_pt_s:+}pt  (順位: 🏠{h_rank}位 vs 🚀{a_rank}位)")
-    print(f"    ・②得失点補正 -> 🏠 {h_goal_pt_s:+}pt / 🚀 {a_goal_pt_s:+}pt  (直近得失: 🏠{h_goal}-{h_lose} vs 🚀{a_goal}-{a_lose})")
+    print(f"    ・②得失点補正 -> 🏠 {h_goal_pt_s:+}pt / 🚀 {a_goal_pt_s:+}pt  (総得失: 🏠{h_goal}-{h_lose} vs 🚀{a_goal}-{a_lose})")
     print(f"    ・③調子係数   -> 🏠 {h_cond_pt_s:+}pt / 🚀 {a_cond_pt_s:+}pt")
     print(f"    ・④怪我人ペナ -> 🏠 {h_inj_pt_s:+}pt / 🚀 {a_inj_pt_s:+}pt  (人数: 🏠{h_inj_count}人 vs 🚀{a_inj_count}人)")
     print(f"    ・⑤過密日程   -> 🏠 {h_rest_pt_s:+}pt / 🚀 {a_rest_pt_s:+}pt  (間隔: 🏠{h_days}日 vs 🚀{a_days}日)")
@@ -187,14 +186,13 @@ for m in match_list:
     
     print(f"  --------------------------------------------------")
     
-    # 2. ☔ 雨の内訳
     print(f"  ☔ 【雨天pt の詳細内訳】(初期値 100pt スタート)")
     print(f"    ・①順位差影響 -> 🏠 {h_rank_pt_r:+}pt / 🚀 {a_rank_pt_r:+}pt")
-    print(f"    ・②失点のみ   -> 🏠 {h_goal_pt_r:+}pt / 🚀 {a_goal_pt_r:+}pt  (雨は失点の多さのみペナルティ)")
+    print(f"    ・②失点のみ   -> 🏠 {h_goal_pt_r:.1f}pt / 🚀 {a_goal_pt_r:.1f}pt  (雨は総失点のみペナルティ)")
     print(f"    ・③調子係数   -> 🏠 {h_cond_pt_r:+}pt / 🚀 {a_cond_pt_r:+}pt")
-    print(f"    ・④守備怪我人 -> 🏠 {h_inj_pt_r:+}pt / 🚀 {a_inj_pt_r:+}pt  (雨はDF/GK怪我を2倍化)")
+    print(f"    ・④守備怪我人 -> 🏠 {h_inj_pt_r:+}pt / 🚀 {a_inj_pt_r:+}pt")
     print(f"    ・⑤過密日程   -> 🏠 {h_rest_pt_r:+}pt / 🚀 {a_rest_pt_r:+}pt")
-    print(f"    ⇒ 最終総合pt  -> 🏠 {h_pt_rainy}pt vs 🚀 {a_pt_rainy}pt")
+    print(f"    ⇒ 最終総合pt  -> 🏠 {h_pt_rainy:.1f}pt vs 🚀 {a_pt_rainy:.1f}pt")
     print(f"    ・変換ウエイト -> 🏠 {details_r['weight_h']:.1f} vs 🚀 {details_r['weight_a']:.1f} " + ("🔥(J2アウェイ・カウンター適用)" if details_r['boost_applied'] else ""))
     print(f"    [確率] 🏠勝:{h_pct_r}%  △分:{d_pct_r}%  🚀負:{a_pct_r}%  ➡️  【予想：{forecast_rainy}】")
     print("-" * 60)
