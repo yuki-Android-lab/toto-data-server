@@ -24,19 +24,19 @@
         "awayConditionCoef": -0.5,
         "forecastSunny": "2",
         "forecastSunnyDetails": {
-            "homePct": 29,
+            "homePct": 10,
             "drawPct": 12,
-            "awayPct": 59,
-            "homePt": 60,
-            "awayPt": 84
+            "awayPct": 78,
+            "homePt": 21,
+            "awayPt": 59
         },
         "forecastRainy": "2",
         "forecastRainyDetails": {
-            "homePct": 33,
-            "drawPct": 17,
-            "awayPct": 50,
-            "homePt": 60.0,
-            "awayPt": 72.0
+            "homePct": 23,
+            "drawPct": 32,
+            "awayPct": 45,
+            "homePt": 10,
+            "awayPt": 10.5
         }
     },
     {
@@ -62,21 +62,21 @@
         "homeConditionCoef": -0.5,
         "awayCondition": "悪化",
         "awayConditionCoef": -0.5,
-        "forecastSunny": "2(1)",
+        "forecastSunny": "2",
         "forecastSunnyDetails": {
-            "homePct": 36,
-            "drawPct": 26,
-            "awayPct": 38,
-            "homePt": 63,
-            "awayPt": 60
-        },
-        "forecastRainy": "2(1)",
-        "forecastRainyDetails": {
-            "homePct": 32,
+            "homePct": 24,
             "drawPct": 32,
-            "awayPct": 36,
-            "homePt": 61.0,
-            "awayPt": 60.0
+            "awayPct": 44,
+            "homePt": 10,
+            "awayPt": 10
+        },
+        "forecastRainy": "2",
+        "forecastRainyDetails": {
+            "homePct": 24,
+            "drawPct": 32,
+            "awayPct": 44,
+            "homePt": 10,
+            "awayPt": 10
         }
     },
     {
@@ -102,21 +102,21 @@
         "homeConditionCoef": -0.5,
         "awayCondition": "悪化",
         "awayConditionCoef": -0.5,
-        "forecastSunny": "2",
+        "forecastSunny": "1",
         "forecastSunnyDetails": {
-            "homePct": 34,
-            "drawPct": 19,
-            "awayPct": 47,
-            "homePt": 60,
-            "awayPt": 66
+            "homePct": 72,
+            "drawPct": 12,
+            "awayPct": 16,
+            "homePt": 37,
+            "awayPt": 14
         },
-        "forecastRainy": "2(1)",
+        "forecastRainy": "2",
         "forecastRainyDetails": {
-            "homePct": 33,
-            "drawPct": 26,
-            "awayPct": 41,
-            "homePt": 60.0,
-            "awayPt": 63.0
+            "homePct": 24,
+            "drawPct": 32,
+            "awayPct": 44,
+            "homePt": 10,
+            "awayPt": 10
         }
     },
     {
@@ -142,21 +142,21 @@
         "homeConditionCoef": -0.5,
         "awayCondition": "悪化",
         "awayConditionCoef": -0.5,
-        "forecastSunny": "2",
+        "forecastSunny": "1(2)",
         "forecastSunnyDetails": {
-            "homePct": 34,
-            "drawPct": 19,
-            "awayPct": 47,
-            "homePt": 60,
-            "awayPt": 66
+            "homePct": 42,
+            "drawPct": 20,
+            "awayPct": 38,
+            "homePt": 15,
+            "awayPt": 10
         },
-        "forecastRainy": "2(1)",
+        "forecastRainy": "2",
         "forecastRainyDetails": {
-            "homePct": 33,
-            "drawPct": 26,
-            "awayPct": 41,
-            "homePt": 60.0,
-            "awayPt": 63.0
+            "homePct": 24,
+            "drawPct": 32,
+            "awayPct": 44,
+            "homePt": 10,
+            "awayPt": 10
         }
     },
     {
@@ -184,19 +184,19 @@
         "awayConditionCoef": -0.5,
         "forecastSunny": "1",
         "forecastSunnyDetails": {
-            "homePct": 51,
-            "drawPct": 16,
-            "awayPct": 33,
-            "homePt": 75,
-            "awayPt": 60
+            "homePct": 75,
+            "drawPct": 12,
+            "awayPct": 13,
+            "homePt": 45,
+            "awayPt": 10
         },
-        "forecastRainy": "1(2)",
+        "forecastRainy": "2",
         "forecastRainyDetails": {
-            "homePct": 44,
-            "drawPct": 19,
-            "awayPct": 37,
-            "homePt": 67.0,
-            "awayPt": 60.0
+            "homePct": 24,
+            "drawPct": 32,
+            "awayPct": 44,
+            "homePt": 10,
+            "awayPt": 10
         }
     },
     {
@@ -224,19 +224,19 @@
         "awayConditionCoef": -0.5,
         "forecastSunny": "2",
         "forecastSunnyDetails": {
-            "homePct": 34,
-            "drawPct": 19,
-            "awayPct": 47,
-            "homePt": 60,
-            "awayPt": 66
+            "homePct": 24,
+            "drawPct": 32,
+            "awayPct": 44,
+            "homePt": 10,
+            "awayPt": 10
         },
-        "forecastRainy": "2(1)",
+        "forecastRainy": "2",
         "forecastRainyDetails": {
-            "homePct": 33,
-            "drawPct": 26,
-            "awayPct": 41,
-            "homePt": 60.0,
-            "awayPt": 63.0
+            "homePct": 24,
+            "drawPct": 32,
+            "awayPct": 44,
+            "homePt": 10,
+            "awayPt": 10
         }
     },
     {
@@ -264,19 +264,19 @@
         "awayConditionCoef": -0.5,
         "forecastSunny": "1(2)",
         "forecastSunnyDetails": {
-            "homePct": 41,
+            "homePct": 45,
             "drawPct": 19,
-            "awayPct": 40,
-            "homePt": 66,
-            "awayPt": 60
+            "awayPct": 36,
+            "homePt": 16,
+            "awayPt": 10
         },
-        "forecastRainy": "2(1)",
+        "forecastRainy": "2",
         "forecastRainyDetails": {
-            "homePct": 36,
-            "drawPct": 26,
-            "awayPct": 38,
-            "homePt": 63.0,
-            "awayPt": 60.0
+            "homePct": 24,
+            "drawPct": 32,
+            "awayPct": 44,
+            "homePt": 10,
+            "awayPt": 10
         }
     },
     {
@@ -302,21 +302,21 @@
         "homeConditionCoef": -0.5,
         "awayCondition": "悪化",
         "awayConditionCoef": -0.5,
-        "forecastSunny": "2(1)",
+        "forecastSunny": "2",
         "forecastSunnyDetails": {
-            "homePct": 33,
-            "drawPct": 26,
-            "awayPct": 41,
-            "homePt": 60,
-            "awayPt": 63
-        },
-        "forecastRainy": "2(0)",
-        "forecastRainyDetails": {
-            "homePct": 31,
+            "homePct": 24,
             "drawPct": 32,
-            "awayPct": 37,
-            "homePt": 60.0,
-            "awayPt": 61.0
+            "awayPct": 44,
+            "homePt": 10,
+            "awayPt": 10
+        },
+        "forecastRainy": "2",
+        "forecastRainyDetails": {
+            "homePct": 24,
+            "drawPct": 32,
+            "awayPct": 44,
+            "homePt": 10,
+            "awayPt": 10
         }
     },
     {
@@ -342,21 +342,21 @@
         "homeConditionCoef": -0.5,
         "awayCondition": "悪化",
         "awayConditionCoef": -0.5,
-        "forecastSunny": "2(1)",
+        "forecastSunny": "2",
         "forecastSunnyDetails": {
-            "homePct": 33,
-            "drawPct": 26,
-            "awayPct": 41,
-            "homePt": 60,
-            "awayPt": 63
-        },
-        "forecastRainy": "2(0)",
-        "forecastRainyDetails": {
-            "homePct": 31,
+            "homePct": 24,
             "drawPct": 32,
-            "awayPct": 37,
-            "homePt": 60.0,
-            "awayPt": 61.0
+            "awayPct": 44,
+            "homePt": 10,
+            "awayPt": 10
+        },
+        "forecastRainy": "2",
+        "forecastRainyDetails": {
+            "homePct": 24,
+            "drawPct": 32,
+            "awayPct": 44,
+            "homePt": 10,
+            "awayPt": 10
         }
     },
     {
@@ -382,21 +382,21 @@
         "homeConditionCoef": -0.5,
         "awayCondition": "悪化",
         "awayConditionCoef": -0.5,
-        "forecastSunny": "1",
+        "forecastSunny": "2",
         "forecastSunnyDetails": {
-            "homePct": 54,
-            "drawPct": 14,
-            "awayPct": 32,
-            "homePt": 78,
-            "awayPt": 60
+            "homePct": 24,
+            "drawPct": 32,
+            "awayPct": 44,
+            "homePt": 10,
+            "awayPt": 10
         },
-        "forecastRainy": "1",
+        "forecastRainy": "2",
         "forecastRainyDetails": {
-            "homePct": 46,
-            "drawPct": 18,
-            "awayPct": 36,
-            "homePt": 69.0,
-            "awayPt": 60.0
+            "homePct": 24,
+            "drawPct": 32,
+            "awayPct": 44,
+            "homePt": 10,
+            "awayPt": 10
         }
     },
     {
@@ -422,21 +422,21 @@
         "homeConditionCoef": -0.5,
         "awayCondition": "悪化",
         "awayConditionCoef": -0.5,
-        "forecastSunny": "1",
+        "forecastSunny": "2",
         "forecastSunnyDetails": {
-            "homePct": 49,
-            "drawPct": 17,
-            "awayPct": 34,
-            "homePt": 72,
-            "awayPt": 60
+            "homePct": 24,
+            "drawPct": 32,
+            "awayPct": 44,
+            "homePt": 10,
+            "awayPt": 10
         },
-        "forecastRainy": "1(2)",
+        "forecastRainy": "2",
         "forecastRainyDetails": {
-            "homePct": 41,
-            "drawPct": 19,
-            "awayPct": 40,
-            "homePt": 66.0,
-            "awayPt": 60.0
+            "homePct": 24,
+            "drawPct": 32,
+            "awayPct": 44,
+            "homePt": 10,
+            "awayPt": 10
         }
     },
     {
@@ -464,19 +464,19 @@
         "awayConditionCoef": -0.5,
         "forecastSunny": "1",
         "forecastSunnyDetails": {
-            "homePct": 49,
-            "drawPct": 17,
-            "awayPct": 34,
-            "homePt": 72,
-            "awayPt": 60
+            "homePct": 65,
+            "drawPct": 15,
+            "awayPct": 20,
+            "homePt": 26,
+            "awayPt": 10
         },
-        "forecastRainy": "1(2)",
+        "forecastRainy": "2",
         "forecastRainyDetails": {
-            "homePct": 41,
-            "drawPct": 19,
-            "awayPct": 40,
-            "homePt": 66.0,
-            "awayPt": 60.0
+            "homePct": 24,
+            "drawPct": 32,
+            "awayPct": 44,
+            "homePt": 10,
+            "awayPt": 10
         }
     },
     {
@@ -502,21 +502,21 @@
         "homeConditionCoef": -0.5,
         "awayCondition": "悪化",
         "awayConditionCoef": -0.5,
-        "forecastSunny": "2(1)",
+        "forecastSunny": "2",
         "forecastSunnyDetails": {
-            "homePct": 33,
-            "drawPct": 26,
-            "awayPct": 41,
-            "homePt": 60,
-            "awayPt": 63
+            "homePct": 21,
+            "drawPct": 17,
+            "awayPct": 62,
+            "homePt": 10,
+            "awayPt": 22
         },
-        "forecastRainy": "2(0)",
+        "forecastRainy": "2",
         "forecastRainyDetails": {
-            "homePct": 31,
+            "homePct": 24,
             "drawPct": 32,
-            "awayPct": 37,
-            "homePt": 60.0,
-            "awayPt": 61.0
+            "awayPct": 44,
+            "homePt": 10,
+            "awayPt": 10
         }
     }
 ]
