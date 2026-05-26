@@ -2,7 +2,7 @@ import json
 import os
 import re
 
-print("4️⃣ [predict.py] 【引き分け確率動的連動・調子ロジック修正版】計算中...")
+print("4️⃣ [predict.py] 【直近調子・文字列ダイレクト判定版】計算中...")
 
 if not os.path.exists('data.json'):
     print("❌ data.json が見つかりません！")
@@ -58,19 +58,39 @@ def extract_days(interval_str):
     match = re.search(r'\d+', str(interval_str))
     return int(match.group()) if match else 6
 
+def convert_recent_to_pt(recent_str):
+    """
+    💥【最重要修正】
+    一律-0.5になっているCoef数値は無視し、Recentの文字列から直接ptを生成する
+    """
+    if not recent_str:
+        return 0
+    
+    # 文字列に含まれるキーワードで判定
+    if "好調" in recent_str or "絶好調" in recent_str:
+        return 20
+    elif "普通" in recent_str:
+        return 0
+    elif "悪化" in recent_str or "不調" in recent_str:
+        return -30
+    
+    return 0  # 判別できない場合はデフォルト0
+
 # 13試合のループ
 for m in match_list:
     match_no = m["matchNo"]
     
-    # JSONの生データを確実にパース
+    # JSONの生データをパース
     h_rank = int(m.get("homeRank", 10))
     a_rank = int(m.get("awayRank", 10))
     h_days = extract_days(m.get("homeInterval"))
     a_days = extract_days(m.get("awayInterval"))
     
-    # 💥【修正】調子係数（例: -0.5 をそのまま計算に使用する）
-    h_cond_coef = float(m.get("homeConditionCoef", 0.0))
-    a_cond_coef = float(m.get("awayConditionCoef", 0.0))
+    # 💥【修正】文字列（"普通" など）を取得し、関数でptに直接変換
+    h_recent_str = m.get("homeRecent", "普通")
+    a_recent_str = m.get("awayRecent", "普通")
+    h_cond_pt_s = convert_recent_to_pt(h_recent_str)
+    a_cond_pt_s = convert_recent_to_pt(a_recent_str)
     
     h_goal = int(m.get("homeGoalsFor", 0))
     h_lose = int(m.get("homeGoalsAgainst", 0))
@@ -86,10 +106,6 @@ for m in match_list:
     a_rank_pt_s = (h_rank - a_rank) * 3 if a_rank < h_rank else 0
     h_goal_pt_s = (h_goal - h_lose)
     a_goal_pt_s = (a_goal - a_lose)
-    
-    # 💥【修正】固定値の-40を廃止し、係数に応じた動的ptに（例: -0.5 * 60 = -30pt）
-    h_cond_pt_s = int(h_cond_coef * 60)
-    a_cond_pt_s = int(a_cond_coef * 60)
     
     h_inj_pt_s = -(h_inj_count * 15)
     a_inj_pt_s = -(a_inj_count * 15)
@@ -110,7 +126,6 @@ for m in match_list:
     h_goal_pt_r = -(h_lose * 1.5)
     a_goal_pt_r = -(a_lose * 1.5)
     
-    # 雨天時も同様に動的処理
     h_cond_pt_r = h_cond_pt_s
     a_cond_pt_r = a_cond_pt_s
     
@@ -127,23 +142,16 @@ for m in match_list:
 
     # 📝 結果出力
     print(f"⚽ 試合No.{match_no}: {m['homeTeam']} vs {m['awayTeam']}")
-    print(f"  ☀️ 【晴れpt の詳細内訳】(初期値 100pt スタート)")
-    print(f"    ・①順位差影響 -> 🏠 {h_rank_pt_s:+}pt / 🚀 {a_rank_pt_s:+}pt  (順位: 🏠{h_rank}位 vs 🚀{a_rank}位)")
-    print(f"    ・②得失点補正 -> 🏠 {h_goal_pt_s:+}pt / 🚀 {a_goal_pt_s:+}pt  (総得失: 🏠{h_goal}-{h_lose} vs 🚀{a_goal}-{a_lose})")
-    print(f"    ・③調子係数   -> 🏠 {h_cond_pt_s:+}pt / 🚀 {a_cond_pt_s:+}pt  (係数: 🏠{h_cond_coef} vs 🚀{a_cond_coef})")
-    print(f"    ・④怪我人ペナ -> 🏠 {h_inj_pt_s:+}pt / 🚀 {a_inj_pt_s:+}pt  (人数: 🏠{h_inj_count}人 vs 🚀{a_inj_count}人)")
-    print(f"    ・⑤過密日程   -> 🏠 {h_rest_pt_s:+}pt / 🚀 {a_rest_pt_s:+}pt  (間隔: 🏠{h_days}日 vs 🚀{a_days}日)")
+    print(f"  ☀️ 【晴れpt の詳細内訳】")
+    print(f"    ・③調子係数   -> 🏠 {h_cond_pt_s:+}pt / 🚀 {a_cond_pt_s:+}pt  (直近状態: 🏠{h_recent_str} / 🚀{a_recent_str})")
     print(f"    ⇒ 最終総合pt  -> 🏠 {h_pt_sunny}pt vs 🚀 {a_pt_sunny}pt")
-    print(f"    ・変換ウエイト -> 🏠 {det_s['weight_h']:.1f} vs 🚀 {det_s['weight_a']:.1f} " + ("🔥(J2アウェイ・カウンター適用)" if det_s['boost_applied'] else ""))
     print(f"    [確率] 🏠勝:{h_pct_s}%  △分:{d_pct_s}%  🚀負:{a_pct_s}%  ➡️  【予想：{forecast_sunny}】")
-    print(f"  --------------------------------------------------")
-    print(f"  ☔ 【雨天pt の詳細内訳】")
-    print(f"    ・③調子係数   -> 🏠 {h_cond_pt_r:+}pt / 🚀 {a_cond_pt_r:+}pt")
-    print(f"    ⇒ 最終総合pt  -> 🏠 {h_pt_rainy:.1f}pt vs 🚀 {a_pt_rainy:.1f}pt")
-    print(f"    [確率] 🏠勝:{h_pct_r}%  △分:{d_pct_r}%  🚀負:{a_pct_r}%  ➡️  【予想：{forecast_rainy}】")
     print("-" * 60)
 
-    # JSON上書き
+    # JSON上書き用の新しい係数を逆算して保存（もし必要なら）
+    m["homeConditionCoef"] = float(h_cond_pt_s / 60.0)
+    m["awayConditionCoef"] = float(a_cond_pt_s / 60.0)
+
     m["forecastSunny"] = forecast_sunny
     m["forecastSunnyDetails"] = {"homePct": h_pct_s, "drawPct": d_pct_s, "awayPct": a_pct_s, "homePt": h_pt_sunny, "awayPt": a_pt_sunny}
     m["forecastRainy"] = forecast_rainy
@@ -152,4 +160,4 @@ for m in match_list:
 with open('data.json', 'w', encoding='utf-8') as f:
     json.dump(match_list, f, ensure_ascii=False, indent=4)
 
-print("💾 [predict.py] 調子係数の動的乗算化が完了しました。")
+print("💾 [predict.py] 直近調子のテキスト判定への切り替えが完了しました。")
