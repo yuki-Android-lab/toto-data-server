@@ -69,79 +69,65 @@ def judge_forecast(h_pct, d_pct, a_pct):
     else:
         return f"{top1_lbl}({top2_lbl})"
 
-# 2. 13試合の予測ループ
+# ==========================================
+# 2. 13試合の予測ループ（データ取得部バグ修正版）
+# ==========================================
 for m in match_list:
     match_no = m["matchNo"]
     home_team = m["homeTeam"]
     away_team = m["awayTeam"]
     
-    h_rank = int(m.get("homeRank", 10)) if m.get("homeRank") is not None else 10
-    a_rank = int(m.get("awayRank", 10)) if m.get("awayRank") is not None else 10
-    h_days = int(m.get("homeRestDays", 6)) if m.get("homeRestDays") is not None else 6
-    a_days = int(m.get("awayRestDays", 6)) if m.get("awayRestDays") is not None else 6
-    h_cond_coef = float(m.get("homeConditionCoef", 0.0))
-    a_cond_coef = float(m.get("awayConditionCoef", 0.0))
+    # --- 【バグ修正】型変換とキー名の揺れ対策 ---
+    h_rank = int(m.get("homeRank") if m.get("homeRank") is not None else 10)
+    a_rank = int(m.get("awayRank") if m.get("awayRank") is not None else 10)
+    h_days = int(m.get("homeRestDays") if m.get("homeRestDays") is not None else 6)
+    a_days = int(m.get("awayRestDays") if m.get("awayRestDays") is not None else 6)
     
-    h_goal = int(m.get("homeGoal", 0)) if m.get("homeGoal") is not None else 0
-    a_goal = int(m.get("awayGoal", 0)) if m.get("awayGoal") is not None else 0
-    h_lose = int(m.get("homeLose", 0)) if m.get("homeLose") is not None else 0
-    a_lose = int(m.get("awayLose", 0)) if m.get("awayLose") is not None else 0
+    # 調子係数の取得を安全に（Noneや文字列対策）
+    try:
+        h_cond_coef = float(m.get("homeConditionCoef", 0.0)) if m.get("homeConditionCoef") is not None else 0.0
+        a_cond_coef = float(m.get("awayConditionCoef", 0.0)) if m.get("awayConditionCoef") is not None else 0.0
+    except (ValueError, TypeError):
+        h_cond_coef = 0.0
+        a_cond_coef = 0.0
     
-    h_injuries = m.get("homeInjuries", [])
-    a_injuries = m.get("awayInjuries", [])
+    # 【得失点キー名対策】"homeGoal" / "homeGoals" どちらでも取れるようにガード
+    h_goal = int(m.get("homeGoal") or m.get("homeGoals") or 0)
+    a_goal = int(m.get("awayGoal") or m.get("awayGoals") or 0)
+    h_lose = int(m.get("homeLose") or m.get("homeLoses") or 0)
+    a_lose = int(m.get("awayLose") or m.get("awayLoses") or 0)
+    
+    # 【怪我人リスト対策】リストの中に辞書、または単なる文字列の配列でもカウントできるようにガード
+    h_injuries = m.get("homeInjuries") or m.get("homeInjuryList") or []
+    a_injuries = m.get("awayInjuries") or m.get("awayInjuryList") or []
+    
     h_inj_count = len(h_injuries) if isinstance(h_injuries, list) else 0
     a_inj_count = len(a_injuries) if isinstance(a_injuries, list) else 0
-    h_df_inj_count = sum(1 for p in h_injuries if isinstance(p, dict) and p.get("pos") in ["DF", "GK"])
-    a_df_inj_count = sum(1 for p in a_injuries if isinstance(p, dict) and p.get("pos") in ["DF", "GK"])
+    
+    # DF/GKの怪我人カウントを安全に
+    h_df_inj_count = 0
+    if isinstance(h_injuries, list):
+        for p in h_injuries:
+            if isinstance(p, dict) and p.get("pos") in ["DF", "GK"]:
+                h_df_inj_count += 1
+            elif isinstance(p, str) and ("DF" in p or "GK" in p or "ピッチャー" in p): # 文字列ガード
+                h_df_inj_count += 1
+                
+    a_df_inj_count = 0
+    if isinstance(a_injuries, list):
+        for p in a_injuries:
+            if isinstance(p, dict) and p.get("pos") in ["DF", "GK"]:
+                a_df_inj_count += 1
+            elif isinstance(p, str) and ("DF" in p or "GK" in p):
+                a_df_inj_count += 1
 
-    # ==========================================
-    # ☀️ 晴れの日の計算ロジック（内訳保存用変数を追加）
-    # ==========================================
-    h_rank_pt_s = (a_rank - h_rank) * 3 if h_rank < a_rank else 0
-    a_rank_pt_s = (h_rank - a_rank) * 3 if a_rank < h_rank else 0
+    # 調子係数（③）の判定バグ修正（0.0の時はきっちり0ptにする）
+    h_cond_pt_s = 20 if h_cond_coef > 0.01 else (-40 if h_cond_coef < -0.01 else 0)
+    a_cond_pt_s = 20 if a_cond_coef > 0.01 else (-40 if a_cond_coef < -0.01 else 0)
     
-    h_goal_pt_s = (h_goal - h_lose)
-    a_goal_pt_s = (a_goal - a_lose)
+    h_cond_pt_r = 20 if h_cond_coef > 0.01 else (-40 if h_cond_coef < -0.01 else 0)
+    a_cond_pt_r = 20 if a_cond_coef > 0.01 else (-40 if a_cond_coef < -0.01 else 0)
     
-    h_cond_pt_s = 20 if h_cond_coef > 0 else (-40 if h_cond_coef < 0 else 0)
-    a_cond_pt_s = 20 if a_cond_coef > 0 else (-40 if a_cond_coef < 0 else 0)
-    
-    h_inj_pt_s = -(h_inj_count * 15)
-    a_inj_pt_s = -(a_inj_count * 15)
-    
-    h_rest_pt_s = -10 if h_days <= 2 else 0
-    a_rest_pt_s = -10 if a_days <= 2 else 0
-
-    h_pt_sunny = max(10, 100 + h_rank_pt_s + h_goal_pt_s + h_cond_pt_s + h_inj_pt_s + h_rest_pt_s)
-    a_pt_sunny = max(10, 100 + a_rank_pt_s + a_goal_pt_s + a_cond_pt_s + a_inj_pt_s + a_rest_pt_s)
-    
-    h_pct_s, d_pct_s, a_pct_s, details_s = calculate_probability(h_pt_sunny, a_pt_sunny, is_rainy=False)
-    forecast_sunny = judge_forecast(h_pct_s, d_pct_s, a_pct_s)
-
-    # ==========================================
-    # ☔ 雨の日の計算ロジック（内訳保存用変数を追加）
-    # ==========================================
-    h_rank_pt_r = int((a_rank - h_rank) * 1.5) if h_rank < a_rank else 0
-    a_rank_pt_r = int((h_rank - a_rank) * 1.5) if a_rank < h_rank else 0
-    
-    h_goal_pt_r = -(h_lose * 1.5)
-    a_goal_pt_r = -(a_lose * 1.5)
-    
-    h_cond_pt_r = 20 if h_cond_coef > 0 else (-40 if h_cond_coef < 0 else 0)
-    a_cond_pt_r = 20 if a_cond_coef > 0 else (-40 if a_cond_coef < 0 else 0)
-    
-    h_inj_pt_r = -(h_inj_count * 15 + h_df_inj_count * 15)
-    a_inj_pt_r = -(a_inj_count * 15 + a_df_inj_count * 15)
-    
-    h_rest_pt_r = -10 if h_days <= 2 else 0
-    a_rest_pt_r = -10 if a_days <= 2 else 0
-
-    h_pt_rainy = max(10, 100 + h_rank_pt_r + h_goal_pt_r + h_cond_pt_r + h_inj_pt_r + h_rest_pt_r)
-    a_pt_rainy = max(10, 100 + a_rank_pt_r + a_goal_pt_r + a_cond_pt_r + a_inj_pt_r + a_rest_pt_r)
-    
-    h_pct_r, d_pct_r, a_pct_r, details_r = calculate_probability(h_pt_rainy, a_pt_rainy, is_rainy=True)
-    forecast_rainy = judge_forecast(h_pct_r, d_pct_r, a_pct_r)
-
     # ==========================================
     # 📝 結果出力（デバッグ内訳表示版）
     # ==========================================
