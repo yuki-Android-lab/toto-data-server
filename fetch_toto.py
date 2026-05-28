@@ -11,7 +11,7 @@ with sync_playwright() as p:
     browser = p.chromium.launch(headless=True)
     
     # 1. 最新の開催回の基準IDを自動抽出
-    base_match_id = 27736 
+    base_match_id = 27853 
     try:
         context = browser.new_context(
             viewport={"width": 1280, "height": 1024},
