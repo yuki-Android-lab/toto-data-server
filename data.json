@@ -46,7 +46,9 @@
             "awayPct": 65,
             "homePt": 10,
             "awayPt": 25.0
-        }
+        },
+        "forecastPatternOnly": "2",
+        "forecastFinalFusion": "2"
     },
     {
         "holdId": 27853,
@@ -95,7 +97,9 @@
             "awayPct": 78,
             "homePt": 22.0,
             "awayPt": 55.0
-        }
+        },
+        "forecastPatternOnly": "1,0",
+        "forecastFinalFusion": "2"
     },
     {
         "holdId": 27853,
@@ -144,7 +148,9 @@
             "awayPct": 42,
             "homePt": 52.0,
             "awayPt": 55.0
-        }
+        },
+        "forecastPatternOnly": "0",
+        "forecastFinalFusion": "1"
     },
     {
         "holdId": 27853,
@@ -193,7 +199,9 @@
             "awayPct": 44,
             "homePt": 10,
             "awayPt": 10
-        }
+        },
+        "forecastPatternOnly": "2",
+        "forecastFinalFusion": "2"
     },
     {
         "holdId": 27853,
@@ -242,7 +250,9 @@
             "awayPct": 65,
             "homePt": 10,
             "awayPt": 25.0
-        }
+        },
+        "forecastPatternOnly": "1",
+        "forecastFinalFusion": "0"
     },
     {
         "holdId": 27853,
@@ -291,7 +301,9 @@
             "awayPct": 44,
             "homePt": 10,
             "awayPt": 10
-        }
+        },
+        "forecastPatternOnly": "1",
+        "forecastFinalFusion": "0"
     },
     {
         "holdId": 27853,
@@ -340,7 +352,9 @@
             "awayPct": 44,
             "homePt": 10,
             "awayPt": 10
-        }
+        },
+        "forecastPatternOnly": "1",
+        "forecastFinalFusion": "0"
     },
     {
         "holdId": 27853,
@@ -389,7 +403,9 @@
             "awayPct": 44,
             "homePt": 10,
             "awayPt": 10
-        }
+        },
+        "forecastPatternOnly": "1",
+        "forecastFinalFusion": "0"
     },
     {
         "holdId": 27853,
@@ -438,7 +454,9 @@
             "awayPct": 9,
             "homePt": 67.0,
             "awayPt": 25.0
-        }
+        },
+        "forecastPatternOnly": "0",
+        "forecastFinalFusion": "2"
     },
     {
         "holdId": 27853,
@@ -487,7 +505,9 @@
             "awayPct": 75,
             "homePt": 10,
             "awayPt": 40.0
-        }
+        },
+        "forecastPatternOnly": "1",
+        "forecastFinalFusion": "0"
     },
     {
         "holdId": 27853,
@@ -536,7 +556,9 @@
             "awayPct": 26,
             "homePt": 37.0,
             "awayPt": 25.0
-        }
+        },
+        "forecastPatternOnly": "2",
+        "forecastFinalFusion": "0"
     },
     {
         "holdId": 27853,
@@ -585,7 +607,9 @@
             "awayPct": 60,
             "homePt": 37.0,
             "awayPt": 55.0
-        }
+        },
+        "forecastPatternOnly": "2,1",
+        "forecastFinalFusion": "2"
     },
     {
         "holdId": 27853,
@@ -634,6 +658,8 @@
             "awayPct": 44,
             "homePt": 10,
             "awayPt": 10
-        }
+        },
+        "forecastPatternOnly": "2",
+        "forecastFinalFusion": "0"
     }
 ]
