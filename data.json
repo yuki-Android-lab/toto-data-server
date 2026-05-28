@@ -80,8 +80,8 @@
             "homePt": 27.5,
             "awayPt": 47.5
         },
-        "forecastPatternOnly": "1",
-        "forecastFinalFusion": "0"
+        "forecastPatternOnly": "1,0",
+        "forecastFinalFusion": "2"
     },
     {
         "holdId": 1631,
@@ -122,8 +122,8 @@
             "homePt": 31.0,
             "awayPt": 32.5
         },
-        "forecastPatternOnly": "1",
-        "forecastFinalFusion": "0"
+        "forecastPatternOnly": "0",
+        "forecastFinalFusion": "1"
     },
     {
         "holdId": 1631,
@@ -332,8 +332,8 @@
             "homePt": 10,
             "awayPt": 10
         },
-        "forecastPatternOnly": "0",
-        "forecastFinalFusion": "1"
+        "forecastPatternOnly": "1",
+        "forecastFinalFusion": "0"
     },
     {
         "holdId": 1631,
@@ -374,8 +374,8 @@
             "homePt": 56.5,
             "awayPt": 10
         },
-        "forecastPatternOnly": "2",
-        "forecastFinalFusion": "0"
+        "forecastPatternOnly": "0",
+        "forecastFinalFusion": "2"
     },
     {
         "holdId": 1631,
@@ -416,8 +416,8 @@
             "homePt": 10,
             "awayPt": 20.5
         },
-        "forecastPatternOnly": "2,1",
-        "forecastFinalFusion": "2"
+        "forecastPatternOnly": "1",
+        "forecastFinalFusion": "0"
     },
     {
         "holdId": 1631,
@@ -500,8 +500,8 @@
             "homePt": 29.5,
             "awayPt": 44.5
         },
-        "forecastPatternOnly": "0",
-        "forecastFinalFusion": "2"
+        "forecastPatternOnly": "2,1",
+        "forecastFinalFusion": "1"
     },
     {
         "holdId": 1631,
@@ -542,7 +542,7 @@
             "homePt": 10,
             "awayPt": 10
         },
-        "forecastPatternOnly": "0",
-        "forecastFinalFusion": "2"
+        "forecastPatternOnly": "2",
+        "forecastFinalFusion": "0"
     }
 ]
