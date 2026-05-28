@@ -1,0 +1,39 @@
+name: Run Pattern Prediction
+
+on:
+  workflow_dispatch: # これを入れることでアプリやブラウザから手動実行ボタンが出ます
+
+jobs:
+  predict:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Run pattern prediction script
+        run: |
+          if [ -f predict_pattern.py ]; then
+            python predict_pattern.py
+          else
+            echo "❌ predict_pattern.py が見つかりません！"
+            exit 1
+          fi
+
+      - name: Commit and Push changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          # data.json が更新されていたら自動でリポジトリに反映する
+          if [ -n "$(git status --porcelain data.json)" ]; then
+            git add data.json
+            git commit -m "🤖 自動更新: 多次元パターン解析による最終融合予想を反映"
+            git push
+          else
+            echo "データに変更はありませんでした。"
+          fi
