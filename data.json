@@ -18,35 +18,17 @@
         "homeTactics": "4-4-2",
         "awayCompatibility": "普通",
         "awayTactics": "4-2-3-1",
-        "homeCondition": "悪化",
+        "homeCondition": "普通",
         "homeInterval": "中6日",
-        "awayCondition": "悪化",
+        "awayCondition": "普通",
         "awayInterval": "中6日",
         "homeInjuries": "なし",
-        "awayInjuries": "クリスティアン・ロメロ",
+        "awayInjuries": "なし",
         "homeRainWinRate": "45%",
         "awayRainWinRate": "45%",
         "weather": "曇り",
         "homeInjuriesCount": 0,
-        "awayInjuriesCount": 1,
-        "homeConditionCoef": 0.0,
-        "awayConditionCoef": 0.3333333333333333,
-        "forecastSunny": "2",
-        "forecastSunnyDetails": {
-            "homePct": 36,
-            "drawPct": 15,
-            "awayPct": 49,
-            "homePt": 103,
-            "awayPt": 119
-        },
-        "forecastRainy": "2",
-        "forecastRainyDetails": {
-            "homePct": 36,
-            "drawPct": 17,
-            "awayPct": 47,
-            "homePt": 82.0,
-            "awayPt": 93.0
-        }
+        "awayInjuriesCount": 0
     },
     {
         "holdId": 27876,
@@ -67,35 +49,17 @@
         "homeTactics": "4-4-2",
         "awayCompatibility": "普通",
         "awayTactics": "4-2-3-1",
-        "homeCondition": "悪化",
+        "homeCondition": "普通",
         "homeInterval": "中6日",
-        "awayCondition": "悪化",
+        "awayCondition": "普通",
         "awayInterval": "中6日",
         "homeInjuries": "なし",
-        "awayInjuries": "ゼノ・デバスト / ジェレミー・ドク / ネイサン・エンゴイ",
+        "awayInjuries": "なし",
         "homeRainWinRate": "45%",
         "awayRainWinRate": "45%",
         "weather": "曇り",
         "homeInjuriesCount": 0,
-        "awayInjuriesCount": 3,
-        "homeConditionCoef": 0.0,
-        "awayConditionCoef": 0.0,
-        "forecastSunny": "1",
-        "forecastSunnyDetails": {
-            "homePct": 66,
-            "drawPct": 12,
-            "awayPct": 22,
-            "homePt": 106,
-            "awayPt": 63
-        },
-        "forecastRainy": "1",
-        "forecastRainyDetails": {
-            "homePct": 74,
-            "drawPct": 12,
-            "awayPct": 14,
-            "homePt": 83.0,
-            "awayPt": 40.0
-        }
+        "awayInjuriesCount": 0
     },
     {
         "holdId": 27876,
@@ -116,9 +80,9 @@
         "homeTactics": "4-4-2",
         "awayCompatibility": "普通",
         "awayTactics": "4-2-3-1",
-        "homeCondition": "悪化",
+        "homeCondition": "普通",
         "homeInterval": "中6日",
-        "awayCondition": "悪化",
+        "awayCondition": "普通",
         "awayInterval": "中6日",
         "homeInjuries": "なし",
         "awayInjuries": "なし",
@@ -126,25 +90,7 @@
         "awayRainWinRate": "45%",
         "weather": "曇り",
         "homeInjuriesCount": 0,
-        "awayInjuriesCount": 0,
-        "homeConditionCoef": 0.0,
-        "awayConditionCoef": 0.3333333333333333,
-        "forecastSunny": "2",
-        "forecastSunnyDetails": {
-            "homePct": 33,
-            "drawPct": 12,
-            "awayPct": 55,
-            "homePt": 103,
-            "awayPt": 131
-        },
-        "forecastRainy": "2",
-        "forecastRainyDetails": {
-            "homePct": 32,
-            "drawPct": 12,
-            "awayPct": 56,
-            "homePt": 82.0,
-            "awayPt": 106.0
-        }
+        "awayInjuriesCount": 0
     },
     {
         "holdId": 27876,
@@ -165,35 +111,17 @@
         "homeTactics": "4-4-2",
         "awayCompatibility": "普通",
         "awayTactics": "4-2-3-1",
-        "homeCondition": "悪化",
+        "homeCondition": "普通",
         "homeInterval": "中6日",
-        "awayCondition": "悪化",
+        "awayCondition": "普通",
         "awayInterval": "中6日",
         "homeInjuries": "なし",
-        "awayInjuries": "ニコ・シュロッターベック",
+        "awayInjuries": "なし",
         "homeRainWinRate": "45%",
         "awayRainWinRate": "45%",
         "weather": "曇り",
         "homeInjuriesCount": 0,
-        "awayInjuriesCount": 1,
-        "homeConditionCoef": 0.0,
-        "awayConditionCoef": 0.0,
-        "forecastSunny": "1",
-        "forecastSunnyDetails": {
-            "homePct": 47,
-            "drawPct": 16,
-            "awayPct": 37,
-            "homePt": 106,
-            "awayPt": 93
-        },
-        "forecastRainy": "1",
-        "forecastRainyDetails": {
-            "homePct": 49,
-            "drawPct": 16,
-            "awayPct": 35,
-            "homePt": 83.0,
-            "awayPt": 70.0
-        }
+        "awayInjuriesCount": 0
     },
     {
         "holdId": 27876,
@@ -214,35 +142,17 @@
         "homeTactics": "4-4-2",
         "awayCompatibility": "普通",
         "awayTactics": "4-2-3-1",
-        "homeCondition": "悪化",
+        "homeCondition": "普通",
         "homeInterval": "中6日",
-        "awayCondition": "悪化",
+        "awayCondition": "普通",
         "awayInterval": "中6日",
-        "homeInjuries": "町野修斗 / 久保建英",
+        "homeInjuries": "なし",
         "awayInjuries": "なし",
         "homeRainWinRate": "45%",
         "awayRainWinRate": "45%",
         "weather": "曇り",
-        "homeInjuriesCount": 2,
-        "awayInjuriesCount": 0,
-        "homeConditionCoef": 0.0,
-        "awayConditionCoef": 0.3333333333333333,
-        "forecastSunny": "2",
-        "forecastSunnyDetails": {
-            "homePct": 18,
-            "drawPct": 12,
-            "awayPct": 70,
-            "homePt": 73,
-            "awayPt": 131
-        },
-        "forecastRainy": "2",
-        "forecastRainyDetails": {
-            "homePct": 13,
-            "drawPct": 12,
-            "awayPct": 75,
-            "homePt": 52.0,
-            "awayPt": 106.0
-        }
+        "homeInjuriesCount": 0,
+        "awayInjuriesCount": 0
     },
     {
         "holdId": 27876,
@@ -263,35 +173,17 @@
         "homeTactics": "4-4-2",
         "awayCompatibility": "普通",
         "awayTactics": "4-2-3-1",
-        "homeCondition": "悪化",
+        "homeCondition": "普通",
         "homeInterval": "中6日",
-        "awayCondition": "悪化",
+        "awayCondition": "普通",
         "awayInterval": "中6日",
-        "homeInjuries": "ロナルド・アラウホ / ジョルジアン・デ・アラスカエタ",
+        "homeInjuries": "なし",
         "awayInjuries": "なし",
         "homeRainWinRate": "45%",
         "awayRainWinRate": "45%",
         "weather": "曇り",
-        "homeInjuriesCount": 2,
-        "awayInjuriesCount": 0,
-        "homeConditionCoef": 0.0,
-        "awayConditionCoef": 0.3333333333333333,
-        "forecastSunny": "2",
-        "forecastSunnyDetails": {
-            "homePct": 17,
-            "drawPct": 12,
-            "awayPct": 71,
-            "homePt": 73,
-            "awayPt": 137
-        },
-        "forecastRainy": "2",
-        "forecastRainyDetails": {
-            "homePct": 12,
-            "drawPct": 12,
-            "awayPct": 76,
-            "homePt": 52.0,
-            "awayPt": 109.0
-        }
+        "homeInjuriesCount": 0,
+        "awayInjuriesCount": 0
     },
     {
         "holdId": 27876,
@@ -312,9 +204,9 @@
         "homeTactics": "4-4-2",
         "awayCompatibility": "普通",
         "awayTactics": "4-2-3-1",
-        "homeCondition": "悪化",
+        "homeCondition": "普通",
         "homeInterval": "中6日",
-        "awayCondition": "悪化",
+        "awayCondition": "普通",
         "awayInterval": "中6日",
         "homeInjuries": "なし",
         "awayInjuries": "なし",
@@ -322,25 +214,7 @@
         "awayRainWinRate": "45%",
         "weather": "曇り",
         "homeInjuriesCount": 0,
-        "awayInjuriesCount": 0,
-        "homeConditionCoef": 0.0,
-        "awayConditionCoef": 0.3333333333333333,
-        "forecastSunny": "2",
-        "forecastSunnyDetails": {
-            "homePct": 33,
-            "drawPct": 12,
-            "awayPct": 55,
-            "homePt": 103,
-            "awayPt": 131
-        },
-        "forecastRainy": "2",
-        "forecastRainyDetails": {
-            "homePct": 32,
-            "drawPct": 12,
-            "awayPct": 56,
-            "homePt": 82.0,
-            "awayPt": 106.0
-        }
+        "awayInjuriesCount": 0
     },
     {
         "holdId": 27876,
@@ -361,9 +235,9 @@
         "homeTactics": "4-4-2",
         "awayCompatibility": "普通",
         "awayTactics": "4-2-3-1",
-        "homeCondition": "悪化",
+        "homeCondition": "普通",
         "homeInterval": "中6日",
-        "awayCondition": "悪化",
+        "awayCondition": "普通",
         "awayInterval": "中6日",
         "homeInjuries": "なし",
         "awayInjuries": "なし",
@@ -371,25 +245,7 @@
         "awayRainWinRate": "45%",
         "weather": "曇り",
         "homeInjuriesCount": 0,
-        "awayInjuriesCount": 0,
-        "homeConditionCoef": 0.0,
-        "awayConditionCoef": 0.3333333333333333,
-        "forecastSunny": "2",
-        "forecastSunnyDetails": {
-            "homePct": 33,
-            "drawPct": 12,
-            "awayPct": 55,
-            "homePt": 103,
-            "awayPt": 131
-        },
-        "forecastRainy": "2",
-        "forecastRainyDetails": {
-            "homePct": 32,
-            "drawPct": 12,
-            "awayPct": 56,
-            "homePt": 82.0,
-            "awayPt": 106.0
-        }
+        "awayInjuriesCount": 0
     },
     {
         "holdId": 27876,
@@ -410,35 +266,17 @@
         "homeTactics": "4-4-2",
         "awayCompatibility": "普通",
         "awayTactics": "4-2-3-1",
-        "homeCondition": "悪化",
+        "homeCondition": "普通",
         "homeInterval": "中6日",
-        "awayCondition": "悪化",
+        "awayCondition": "普通",
         "awayInterval": "中6日",
         "homeInjuries": "なし",
-        "awayInjuries": "クインテン・ティンバー",
+        "awayInjuries": "なし",
         "homeRainWinRate": "45%",
         "awayRainWinRate": "45%",
         "weather": "曇り",
         "homeInjuriesCount": 0,
-        "awayInjuriesCount": 1,
-        "homeConditionCoef": 0.0,
-        "awayConditionCoef": 0.3333333333333333,
-        "forecastSunny": "2",
-        "forecastSunnyDetails": {
-            "homePct": 35,
-            "drawPct": 14,
-            "awayPct": 51,
-            "homePt": 103,
-            "awayPt": 122
-        },
-        "forecastRainy": "2",
-        "forecastRainyDetails": {
-            "homePct": 35,
-            "drawPct": 17,
-            "awayPct": 48,
-            "homePt": 82.0,
-            "awayPt": 94.0
-        }
+        "awayInjuriesCount": 0
     },
     {
         "holdId": 27876,
@@ -459,35 +297,17 @@
         "homeTactics": "4-4-2",
         "awayCompatibility": "普通",
         "awayTactics": "4-2-3-1",
-        "homeCondition": "悪化",
+        "homeCondition": "普通",
         "homeInterval": "中6日",
-        "awayCondition": "悪化",
+        "awayCondition": "普通",
         "awayInterval": "中6日",
-        "homeInjuries": "ミゲル・アルミロン",
+        "homeInjuries": "なし",
         "awayInjuries": "なし",
         "homeRainWinRate": "45%",
         "awayRainWinRate": "45%",
         "weather": "曇り",
-        "homeInjuriesCount": 1,
-        "awayInjuriesCount": 0,
-        "homeConditionCoef": 0.0,
-        "awayConditionCoef": 0.0,
-        "forecastSunny": "2",
-        "forecastSunnyDetails": {
-            "homePct": 35,
-            "drawPct": 15,
-            "awayPct": 50,
-            "homePt": 91,
-            "awayPt": 108
-        },
-        "forecastRainy": "2",
-        "forecastRainyDetails": {
-            "homePct": 33,
-            "drawPct": 15,
-            "awayPct": 52,
-            "homePt": 68.0,
-            "awayPt": 85.0
-        }
+        "homeInjuriesCount": 0,
+        "awayInjuriesCount": 0
     },
     {
         "holdId": 27876,
@@ -508,35 +328,17 @@
         "homeTactics": "4-4-2",
         "awayCompatibility": "普通",
         "awayTactics": "4-2-3-1",
-        "homeCondition": "悪化",
+        "homeCondition": "普通",
         "homeInterval": "中6日",
-        "awayCondition": "悪化",
+        "awayCondition": "普通",
         "awayInterval": "中6日",
-        "homeInjuries": "ユリアン・リエルソン",
+        "homeInjuries": "なし",
         "awayInjuries": "なし",
         "homeRainWinRate": "45%",
         "awayRainWinRate": "45%",
         "weather": "曇り",
-        "homeInjuriesCount": 1,
-        "awayInjuriesCount": 0,
-        "homeConditionCoef": 0.0,
-        "awayConditionCoef": 0.3333333333333333,
-        "forecastSunny": "2",
-        "forecastSunnyDetails": {
-            "homePct": 24,
-            "drawPct": 12,
-            "awayPct": 64,
-            "homePt": 88,
-            "awayPt": 137
-        },
-        "forecastRainy": "2",
-        "forecastRainyDetails": {
-            "homePct": 23,
-            "drawPct": 12,
-            "awayPct": 65,
-            "homePt": 67.0,
-            "awayPt": 109.0
-        }
+        "homeInjuriesCount": 0,
+        "awayInjuriesCount": 0
     },
     {
         "holdId": 27876,
@@ -557,9 +359,9 @@
         "homeTactics": "4-4-2",
         "awayCompatibility": "普通",
         "awayTactics": "4-2-3-1",
-        "homeCondition": "悪化",
+        "homeCondition": "普通",
         "homeInterval": "中6日",
-        "awayCondition": "悪化",
+        "awayCondition": "普通",
         "awayInterval": "中6日",
         "homeInjuries": "なし",
         "awayInjuries": "なし",
@@ -567,25 +369,7 @@
         "awayRainWinRate": "45%",
         "weather": "曇り",
         "homeInjuriesCount": 0,
-        "awayInjuriesCount": 0,
-        "homeConditionCoef": 0.0,
-        "awayConditionCoef": 0.3333333333333333,
-        "forecastSunny": "2",
-        "forecastSunnyDetails": {
-            "homePct": 33,
-            "drawPct": 12,
-            "awayPct": 55,
-            "homePt": 103,
-            "awayPt": 131
-        },
-        "forecastRainy": "2",
-        "forecastRainyDetails": {
-            "homePct": 32,
-            "drawPct": 12,
-            "awayPct": 56,
-            "homePt": 82.0,
-            "awayPt": 106.0
-        }
+        "awayInjuriesCount": 0
     },
     {
         "holdId": 27876,
@@ -606,9 +390,9 @@
         "homeTactics": "4-4-2",
         "awayCompatibility": "普通",
         "awayTactics": "4-2-3-1",
-        "homeCondition": "悪化",
+        "homeCondition": "普通",
         "homeInterval": "中6日",
-        "awayCondition": "悪化",
+        "awayCondition": "普通",
         "awayInterval": "中6日",
         "homeInjuries": "なし",
         "awayInjuries": "なし",
@@ -616,24 +400,6 @@
         "awayRainWinRate": "45%",
         "weather": "曇り",
         "homeInjuriesCount": 0,
-        "awayInjuriesCount": 0,
-        "homeConditionCoef": 0.0,
-        "awayConditionCoef": 0.3333333333333333,
-        "forecastSunny": "2",
-        "forecastSunnyDetails": {
-            "homePct": 33,
-            "drawPct": 12,
-            "awayPct": 55,
-            "homePt": 103,
-            "awayPt": 131
-        },
-        "forecastRainy": "2",
-        "forecastRainyDetails": {
-            "homePct": 32,
-            "drawPct": 12,
-            "awayPct": 56,
-            "homePt": 82.0,
-            "awayPt": 106.0
-        }
+        "awayInjuriesCount": 0
     }
 ]
